@@ -1,0 +1,21 @@
+[
+  { "name": "Website design & development", "signals": "No website, outdated site, slow mobile page" },
+  { "name": "Ecommerce", "signals": "Sells products but has no shop, or a weak shop" },
+  { "name": "SEO", "signals": "Website exists but weak search visibility, missing meta description" },
+  { "name": "PSEO", "signals": "Many locations or products and almost no landing pages" },
+  { "name": "Social media management", "signals": "Weak or inactive social presence" },
+  { "name": "Digital marketing", "signals": "No Meta Pixel, no GA4, wasted ad spend" },
+  { "name": "Mobile apps", "signals": "Mobile experience is a slow website, or they mention an app" },
+  { "name": "Custom software", "signals": "Manual process, old stack, jQuery, spreadsheet operations" },
+  { "name": "SaaS development", "signals": "Product idea or internal tool they want as software" },
+  { "name": "CRM", "signals": "Sales team with no CRM mentioned" },
+  { "name": "ERP", "signals": "Manufacturer, distributor, or multi-site firm with no modern ERP signal" },
+  { "name": "SAP", "signals": "Enterprise manufacturer or logistics firm" },
+  { "name": "RFID", "signals": "Warehouse, retail chain, manufacturing, asset tracking" },
+  { "name": "IoT", "signals": "Physical operations that could use sensors or connected devices" },
+  { "name": "AI / automation", "signals": "Repetitive ops, support load, manual follow-up" },
+  { "name": "Cloud", "signals": "On-prem or aging hosting signals" },
+  { "name": "Web & E-commerce", "signals": "Slow site, old shop platform" },
+  { "name": "Staff augmentation", "signals": "Hiring developers, stale frontend" },
+  { "name": "Managed IT", "signals": "Missing security headers, no reliable IT support" }
+]

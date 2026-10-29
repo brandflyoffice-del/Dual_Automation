@@ -1,0 +1,50 @@
+name: Deploy to VPS
+
+# Every push to main deploys. Needs these repository secrets (Settings -> Secrets and variables -> Actions):
+#   DEPLOY_HOST         server IPv4
+#   DEPLOY_SSH_KEY      PRIVATE half of a dedicated deploy key (the public half goes in the server's authorized_keys)
+#   DEPLOY_KNOWN_HOSTS  output of: ssh-keyscan -t ed25519 <server-ip>     (pins the server identity)
+# Server-side secrets (.env, n8n API keys) stay on the server; they are never in GitHub.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm run lint
+      - run: node n8n/test-helpers.mjs
+      - name: n8n workflow builds and validates
+        run: node n8n/build-workflows.mjs
+
+  deploy:
+    needs: checks
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare ssh
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+      - name: Deploy
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: root
+          DEPLOY_STRICT_HOST_KEY: "yes"
+        run: DEPLOY_KEY="$HOME/.ssh/deploy_key" node scripts/deploy.mjs

@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: fenebris-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fenebris
+      POSTGRES_PASSWORD: fenebris
+      POSTGRES_DB: fenebris
+    ports:
+      - "54329:5432"
+    volumes:
+      - fenebris_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fenebris"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  fenebris_pgdata:

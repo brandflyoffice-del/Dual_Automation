@@ -1,0 +1,132 @@
+// Fenebris Outreach OS — Postgres (works 1:1 on Supabase).
+// Status-like columns are plain strings (validated in src/lib/constants.ts + zod)
+// so n8n Postgres nodes can write them without enum casts.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Lead {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email               String   @unique
+  emailStatus         String   @default("UNVERIFIED") @map("email_status") // VALID | INVALID | CATCH_ALL | UNVERIFIED
+  firstName           String   @map("first_name")
+  lastName            String   @default("") @map("last_name")
+  role                String
+  linkedinUrl         String?  @map("linkedin_url")
+  companyName         String   @map("company_name")
+  companyDomain       String   @map("company_domain")
+  companyWebsite      String?  @map("company_website")
+  country             String
+  region              String // US | UK | EUROPE | UAE
+  industry            String // ECOMMERCE_RETAIL | FINTECH | REAL_ESTATE_LOGISTICS | EDTECH | HOSPITALITY
+  employeeCount       Int?     @map("employee_count")
+  annualRevenue       Int      @map("annual_revenue") // USD, $100k – $10M ICP window
+  painPoint           String?  @map("pain_point") // short tag e.g. "Slow website"
+  painPointDetail     String?  @map("pain_point_detail")
+  auditFindings       Json?    @map("audit_findings") // PageSpeed + tech stack + pixels + security headers
+  recommendedService  String?  @map("recommended_service") // WEB_ECOM | DIGITAL_MARKETING | STAFF_AUG | MANAGED_IT
+  qualificationScore  Int      @default(0) @map("qualification_score") // 0-100
+  estimatedTicket     Int      @default(0) @map("estimated_ticket") // USD, hard floor $1,000
+  dossier             Json? // { summary, discoveryQuestions[3], talkingPoints[] }
+  stage               String   @default("SCRAPED") // see LEAD_STAGES
+  currentStep         Int      @default(0) @map("current_step")
+  sequencePaused      Boolean  @default(false) @map("sequence_paused")
+  replySentiment      String?  @map("reply_sentiment") // Positive_Booking_Intent | Question_Needs_FollowUp | Not_Interested | Out_Of_Office
+  needsHuman          Boolean  @default(false) @map("needs_human")
+  repliedAt           DateTime? @map("replied_at") @db.Timestamptz
+  outreachLeadId      String?  @map("outreach_lead_id") // Instantly / Smartlead id
+  campaignId          String?  @map("campaign_id")
+  source              String   @default("apollo")
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  sequences CampaignSequence[]
+  events    EmailEvent[]
+  meetings  Meeting[]
+
+  @@index([stage])
+  @@index([region])
+  @@index([industry])
+  @@map("leads")
+}
+
+model CampaignSequence {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  leadId      String    @map("lead_id") @db.Uuid
+  step        Int // 1..4  (Day 0 / Day 3 / Day 7 / Day 11)
+  subject     String
+  body        String
+  scheduledAt DateTime? @map("scheduled_at") @db.Timestamptz
+  sentAt      DateTime? @map("sent_at") @db.Timestamptz
+  status      String    @default("SCHEDULED") // DRAFT | SCHEDULED | SENT | SKIPPED
+  opens       Int       @default(0)
+  clicks      Int       @default(0)
+  replied     Boolean   @default(false)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@unique([leadId, step])
+  @@map("campaign_sequences")
+}
+
+model EmailEvent {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  leadId      String   @map("lead_id") @db.Uuid
+  type        String // EMAIL_SENT | EMAIL_OPENED | LINK_CLICKED | REPLY_RECEIVED | EMAIL_BOUNCED | AI_REPLY_SENT
+  step        Int?
+  externalId  String?  @map("external_id") // Instantly email uuid (needed to reply in-thread)
+  eaccount    String?  @map("eaccount") // sending mailbox (Instantly requires it to reply)
+  subject     String?
+  body        String?
+  sentiment   String?
+  aiReply     String?  @map("ai_reply")
+  aiReplySent Boolean  @default(false) @map("ai_reply_sent")
+  needsHuman  Boolean  @default(false) @map("needs_human")
+  occurredAt  DateTime @default(now()) @map("occurred_at") @db.Timestamptz
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId, occurredAt])
+  @@map("email_events")
+}
+
+model Meeting {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  leadId            String   @map("lead_id") @db.Uuid
+  calBookingUid     String   @unique @map("cal_booking_uid")
+  startTime         DateTime @map("start_time") @db.Timestamptz
+  endTime           DateTime @map("end_time") @db.Timestamptz
+  prospectTimezone  String   @default("UTC") @map("prospect_timezone")
+  meetLink          String?  @map("meet_link")
+  calendarEventId   String?  @map("calendar_event_id")
+  calendarEventUrl  String?  @map("calendar_event_url")
+  status            String   @default("SCHEDULED") // SCHEDULED | COMPLETED_PROPOSAL_SENT | CLOSED_WON | NO_SHOW | RESCHEDULED | CANCELLED
+  estimatedTicket   Int      @default(0) @map("estimated_ticket")
+  notes             String   @default("")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([startTime])
+  @@map("meetings")
+}
+
+model WeeklyReport {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  weekStart   DateTime @map("week_start") @db.Timestamptz
+  weekEnd     DateTime @map("week_end") @db.Timestamptz
+  shareToken  String   @unique @map("share_token")
+  metrics     Json
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("weekly_reports")
+}

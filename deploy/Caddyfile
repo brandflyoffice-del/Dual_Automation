@@ -1,0 +1,28 @@
+# Caddy gets and renews HTTPS certificates by itself (Let's Encrypt).
+# APP_DOMAIN / N8N_DOMAIN / DASH_USER / DASH_PASS_HASH come from /opt/fenebris/.env (see deploy/docker-compose.prod.yml).
+
+{$APP_DOMAIN} {
+	encode zstd gzip
+
+	# The dashboard has no login of its own, so the whole thing sits behind HTTP basic auth.
+	# Left open on purpose: the public report share page (/r/<token>) and its static assets.
+	@public path /r/* /_next/* /brand/* /icon.png /apple-icon.png
+	@private not path /r/* /_next/* /brand/* /icon.png /apple-icon.png
+	basic_auth @private {
+		{$DASH_USER} {$DASH_PASS_HASH}
+	}
+
+	# The n8n -> dashboard callback is internal (http://dashboard:3400), never through the internet.
+	@internal path /api/webhooks/n8n
+	respond @internal 404
+
+	reverse_proxy dashboard:3400 {
+		# SSE (/api/events) must not be buffered
+		flush_interval -1
+	}
+}
+
+{$N8N_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy n8n:5678
+}

@@ -1,0 +1,127 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --radius: 0.6rem;
+  --background: #f5f6f8;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --primary: #059669;
+  --primary-foreground: #ffffff;
+  --secondary: #eef0f4;
+  --secondary-foreground: #1e293b;
+  --muted: #f1f3f6;
+  --muted-foreground: #5b6477;
+  --accent: #eceffd;
+  --accent-foreground: #1e1b4b;
+  --destructive: #e11d48;
+  --border: rgba(15, 23, 42, 0.1);
+  --input: rgba(15, 23, 42, 0.14);
+  --ring: #4f46e5;
+  --indigo: #4f46e5;
+  --emerald: #059669;
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.04);
+  --shadow-pop: 0 10px 30px -10px rgba(15, 23, 42, 0.2), 0 2px 6px rgba(15, 23, 42, 0.06);
+}
+
+@theme inline {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, monospace;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-indigo: var(--indigo);
+  --color-emerald: var(--emerald);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    color-scheme: light;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+  ::selection {
+    background: rgba(79, 70, 229, 0.2);
+  }
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(15, 23, 42, 0.15);
+    border-radius: 8px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(15, 23, 42, 0.28);
+  }
+}
+
+@layer utilities {
+  .font-metric {
+    font-family: var(--font-jetbrains), ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+  .hairline {
+    border: 1px solid var(--border);
+  }
+  .shadow-card {
+    box-shadow: var(--shadow-card);
+  }
+  .shadow-pop {
+    box-shadow: var(--shadow-pop);
+  }
+  .glow-emerald {
+    box-shadow: 0 0 0 1px rgba(5, 150, 105, 0.3), 0 8px 24px -10px rgba(5, 150, 105, 0.35);
+  }
+}
+
+/* Shareable report: clean print / "Save as PDF" output */
+@media print {
+  html,
+  body {
+    background: #fff !important;
+    color: #111 !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-card {
+    background: #fff !important;
+    color: #111 !important;
+    border: 1px solid #ddd !important;
+    break-inside: avoid;
+  }
+  .print-card * {
+    color: #111 !important;
+  }
+}
