@@ -22,7 +22,7 @@ const readEnv = (p) =>
       ? readFileSync(p, "utf8")
           .split(/\r?\n/)
           .filter((l) => /^[A-Z0-9_]+=/.test(l))
-          .map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1).replace(/^"|"$/g, "")])
+          .map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1).replace(/^["']+|["']+$/g, "")])
       : [],
   );
 
