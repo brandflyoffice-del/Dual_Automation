@@ -223,7 +223,7 @@ for (const it of $input.all()) {
   else if (j && Array.isArray(j.data)) rows.push(...j.data);
   else if (j) rows.push(j);
 }
-const leads = rows.filter(r => r && r.email && !r._status && !r.error);
+const leads = rows.filter(r => r && r.email && (!r._status || r._status === 'found') && !r.error); // actor marks good rows _status "found", bad ones "skipped_*"
 return leads.slice(0, ctx.limit).map(r => ({ json: { apify: r } }));
 `,
   );
