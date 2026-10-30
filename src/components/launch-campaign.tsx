@@ -450,7 +450,7 @@ export function LaunchCampaign({ className, compact = false }: { className?: str
 
           <div className="rounded-lg border border-border bg-muted px-3 py-2.5 text-[12px] leading-relaxed text-muted-foreground">
             <span className="font-medium text-foreground">{summary}</span>
-            <span className="mt-1 block">A known revenue outside $100k–$10M is dropped. A real work email and a $1,000+ ticket are still required.</span>
+            <span className="mt-1 block">A known revenue outside $100k–$10M is dropped. A real work email is still required.</span>
           </div>
           {!ready && <p className="text-xs text-rose-600">Keep at least one region, industry, role, and company size. If Europe is on, keep one country.</p>}
         </div>

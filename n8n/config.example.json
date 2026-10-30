@@ -23,5 +23,6 @@
   "SENDER_NAME": "Aarav Mehta",
   "CASE_STUDIES": "",
   "DAILY_LEAD_LIMIT": "40",
+  "TICKET_GATE": "on",
   "AI_AUTO_REPLY": "true"
 }

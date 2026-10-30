@@ -38,7 +38,7 @@ export default async function LeadsPage() {
     <>
       <PageHeader
         title="Lead & Pain-Point Intelligence"
-        description="Every lead is ICP-filtered (US/UK/EU/UAE · $100k–$10M revenue · $1k+ ticket), email-verified and audited for a real hook before a single email is sent."
+        description="Every lead is ICP-filtered (US/UK/EU/UAE · $100k–$10M revenue), email-verified and audited for a real hook before a single email is sent."
         actions={<LiveRefresh />}
       />
       <LeadsExplorer leads={rows} />

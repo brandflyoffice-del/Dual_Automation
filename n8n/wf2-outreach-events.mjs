@@ -1,5 +1,5 @@
 import { Workflow, webhook, respond, respondHtml, ifNode, switchNode, http, code, postgres, sticky, dashboardNotify, smartleadUrl, googleCalendarIdNode, calExpr } from "./lib.mjs";
-import { CLASSIFY_REPLY_SYSTEM, DRAFT_REPLY_SYSTEM } from "./prompts.mjs";
+import { CLASSIFY_REPLY_SYSTEM, DRAFT_REPLY_SYSTEM, STARTING_PRICE } from "./prompts.mjs";
 import { SIGN_JS, FMT_JS, PAGE_JS } from "./helpers.mjs";
 
 const GCRED = { googleCalendarOAuth2Api: { id: "y5FL0LJTf7OK7BZo", name: "Google Calendar account" } };
@@ -350,7 +350,7 @@ return [{ json: { ctx: { ...ctx, brand, signOff, offered, openIsos: openList.map
     w,
     "Parse Draft + Send Policy",
     [16, -1],
-    FMT_JS + String.raw`
+    FMT_JS + "const APPROVED_PRICE = " + JSON.stringify(STARTING_PRICE) + ";\n" + String.raw`
 const ctx = $('Build Reply Request').first().json.ctx;
 const booking = $env.BOOKING_LINK;
 let draft = null;
@@ -367,7 +367,8 @@ if (valid && draft.accepted_slot_iso) {
 // The system adds the sign-off itself; drop one if the model wrote its own anyway.
 const text = valid ? String(draft.body).trim().replace(/\n+\s*(warm regards|best regards|kind regards|regards|sincerely|best|cheers)[,.!]?\s*(\n[^\n]{1,60}){0,3}$/i, '').trim() : '';
 // The one approved starting price may be quoted; any other money figure holds the reply for a human.
-const withoutApproved = text.replace(/\$\s?1,?000(\.00)?(\s?(usd|dollars))?\+?/gi, ' ');
+const approvedRe = new RegExp('\\$\\s?' + APPROVED_PRICE.replace(/[^0-9]/g, '').replace(/(\d)(?=(\d{3})+$)/g, '$1,?') + '(\\.00)?(?!\\d|,\\d)(\\s?(usd|dollars))?\\+?', 'gi');
+const withoutApproved = text.replace(approvedRe, ' ');
 const priceClaim = valid && /\$\s?\d|\b\d[\d,.]*\s?(usd|dollars)\b/i.test(withoutApproved);
 // Flags from the model: anything other than "none" means a human must look first (support, billing, complaint, unsubscribe).
 const flag = valid ? String(draft.flag || 'none').toLowerCase() : 'none';

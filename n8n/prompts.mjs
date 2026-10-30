@@ -30,6 +30,7 @@ TICKET-SIZE GUIDANCE (USD, fixed-price first engagement). Scale inside the range
 - STAFF_AUG: 3,000 – 25,000 (first 3 months, 1–3 people)
 - MANAGED_IT: 2,000 – 15,000 (setup + first quarter)
 If, honestly, the realistic first project for this company is below 1,000 USD, set fits_ticket_threshold=false and explain in disqualify_reason. Never inflate an estimate to pass the gate.
+EXCEPTION: when <ticket_gate> is "off", there is NO minimum ticket. Set fits_ticket_threshold from the ICP (location, role, industry, size) and contactability alone, never disqualify because of project value, and still give estimated_ticket_usd as an honest rough integer (informational only).
 `.trim();
 
 export const QUALIFY_AND_SEQUENCE_SYSTEM = `

@@ -192,7 +192,7 @@ const prospect = known ? ((row.first_name || '') + ' ' + (row.last_name || '')).
 const company = known ? row.company_name : bk.email.split('@')[1];
 const role = known ? row.role : 'Role unknown';
 const ticket = known ? Number(row.estimated_ticket) : 1000;
-const title = '[BrandFly Discovery] ' + company + ' (' + prospect + ' - ' + role + ') - Est. $' + money(ticket) + '+';
+const title = '[BrandFly Discovery] ' + company + ' (' + prospect + ' - ' + role + ')' + ($env.TICKET_GATE === 'off' ? '' : ' - Est. $' + money(ticket) + '+');
 const when = fmt(bk.startTime, bk.timezone) + ' (' + bk.timezone + ')  |  ' + fmt(bk.startTime, IST) + ' IST';
 
 const a = (row.audit_findings || {});

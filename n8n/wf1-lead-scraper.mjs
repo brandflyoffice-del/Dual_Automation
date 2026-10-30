@@ -512,7 +512,8 @@ return $input.all().map(it => {
     '<case_studies>' + (($env.CASE_STUDIES) || '') + '</case_studies>\n' +
     '<booking_link>' + booking + '</booking_link>\n<sender_name>' + sender + ', BrandFly</sender_name>\n' +
     '<offering>' + (ctx.offering || ctx.service || 'none') + '</offering>\n' +
-    '<preferred_service_tiebreaker>' + (ctx.service || 'none') + '</preferred_service_tiebreaker>';
+    '<preferred_service_tiebreaker>' + (ctx.service || 'none') + '</preferred_service_tiebreaker>\n' +
+    '<ticket_gate>' + ($env.TICKET_GATE === 'off' ? 'off' : 'on') + '</ticket_gate>';
   return { json: { ...l, llmRequest: { model: $env.OPENAI_MODEL || 'gpt-4o', temperature: 0.4, response_format: { type: 'json_object' },
     messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: user }] } } };
 });
@@ -544,10 +545,11 @@ $input.all().forEach((it, i) => {
   const emails = Array.isArray(ai.emails) ? ai.emails : [];
   const emailsOk = emails.length === 4 && emails.every((e, k) => e && e.step === k + 1 && e.subject && e.body && !/\{\{|\}\}|\[(name|company|first)/i.test(e.subject + e.body));
   const ticket = Number.isInteger(ai.estimated_ticket_usd) ? ai.estimated_ticket_usd : 0;
-  // HARD GATE: ICP + $1,000+ ticket + valid service + valid sequence
+  // HARD GATE: ICP + $1,000+ ticket + valid service + valid sequence. TICKET_GATE=off (config) drops the ticket test only.
+  const gateOn = $env.TICKET_GATE !== 'off';
   const serviceName = String(ai.recommended_service || ctx.offering || '').trim();
-  const qualified = ai.fits_ticket_threshold === true && ticket >= 1000 && serviceName.length > 1 && emailsOk;
-  let reason = qualified ? null : (ai.disqualify_reason || (ticket < 1000 ? 'Estimated ticket below $1,000' : !emailsOk ? 'Invalid email sequence from LLM' : 'Did not fit ICP'));
+  const qualified = ai.fits_ticket_threshold === true && (!gateOn || ticket >= 1000) && serviceName.length > 1 && emailsOk;
+  let reason = qualified ? null : (ai.disqualify_reason || (gateOn && ticket < 1000 ? 'Estimated ticket below $1,000' : !emailsOk ? 'Invalid email sequence from LLM' : 'Did not fit ICP'));
   if (!qualified) { out.push({ json: { qualified: false, email: lead.email, company: lead.companyName, reason } }); return; }
 
   const bodies = emails.map(e => e.body.includes(booking) ? e.body : e.body + '\n\nBook a time here: ' + booking); // guarantee CTA
