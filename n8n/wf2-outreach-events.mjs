@@ -313,7 +313,15 @@ const offered = picks.map(p => {
 const openList = all.slice(0, 40).map(a => ({ iso: new Date(a.ms).toISOString(), label: slotLabel(a.ms, ctx.tz) }));
 
 const booking = $env.BOOKING_LINK;
-const sender = $env.SENDER_NAME || 'Aarav Mehta';
+const sender = $env.SENDER_NAME || 'Jay T';
+// Same sender, two brands: the SEO campaign is signed Expert in SEO, everything else TapadiaTech.
+const BRANDS = {
+  '4238487': { name: 'Expert in SEO', website: 'https://www.expertinseo.com', support_email: null, credentials: '15+ years in SEO' },
+  def: { name: 'TapadiaTech', website: 'https://www.tapadiatech.com', support_email: 'info@tapadiatech.com',
+    credentials: 'Since 2001; clients across 60+ countries; 25+ years of web experience; 17+ years of mobile app experience; 15+ years in SEO' },
+};
+const brand = BRANDS[String(ctx.ids.campaignId || ctx.lead.campaign_id || '')] || BRANDS.def;
+const signOff = 'Warm regards,\n' + sender + '\n' + brand.name;
 const sent = (ctx.lead.sent_emails || []).filter(e => e.step <= (ctx.event.step || 1)).pop() || {};
 const threadText = (ctx.thread && ctx.thread.length)
   ? ctx.thread.map(t => '[' + t.from.toUpperCase() + (t.at ? ' ' + t.at : '') + ']' + (t.subject ? ' Subject: ' + t.subject : '') + '\n' + t.text).join('\n\n')
@@ -325,8 +333,9 @@ const user =
   '<prospect_latest_reply>\n' + ctx.replyText + '\n</prospect_latest_reply>\n' +
   '<open_slots>\n' + (openList.length ? openList.map(s => s.iso + ' | ' + s.label).join('\n') : '(none)') + '\n</open_slots>\n' +
   '<time_buttons>' + (offered.length ? offered.map(s => s.label).join(' ; ') : 'none, only the booking link') + '</time_buttons>\n' +
-  '<booking_link>' + booking + '</booking_link>\n<case_studies>' + (($env.CASE_STUDIES) || '') + '</case_studies>\n<sender_name>' + sender + ', BrandFly</sender_name>';
-return [{ json: { ctx: { ...ctx, offered, openIsos: openList.map(s => s.iso), openLabels: Object.fromEntries(openList.map(s => [s.iso, s.label])), publicBase, busyCount: busy.length }, draftRequest: { model: $env.OPENAI_MODEL || 'gpt-4o', temperature: 0.3, response_format: { type: 'json_object' },
+  '<booking_link>' + booking + '</booking_link>\n<case_studies>' + (($env.CASE_STUDIES) || '') + '</case_studies>\n' +
+  '<brand>' + JSON.stringify(brand) + '</brand>\n<lead_stage>' + (ctx.lead.stage || '') + '</lead_stage>';
+return [{ json: { ctx: { ...ctx, brand, signOff, offered, openIsos: openList.map(s => s.iso), openLabels: Object.fromEntries(openList.map(s => [s.iso, s.label])), publicBase, busyCount: busy.length }, draftRequest: { model: $env.OPENAI_MODEL || 'gpt-4o', temperature: 0.3, response_format: { type: 'json_object' },
   messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: user }] } } }];
 `,
   );
@@ -354,12 +363,19 @@ if (valid && draft.accepted_slot_iso) {
   if (isFinite(ms) && ctx.openIsos.some(i => new Date(i).getTime() === ms) && ctx.confidence >= 0.6) accept = new Date(ms).toISOString();
 }
 
-const text = valid ? String(draft.body).trim() : '';
-const priceClaim = valid && /\$\s?\d|\b\d[\d,.]*\s?(usd|dollars)\b/i.test(text);
+// The system adds the sign-off itself; drop one if the model wrote its own anyway.
+const text = valid ? String(draft.body).trim().replace(/\n+\s*(warm regards|best regards|kind regards|regards|sincerely|best|cheers)[,.!]?\s*(\n[^\n]{1,60}){0,3}$/i, '').trim() : '';
+// The one approved starting price may be quoted; any other money figure holds the reply for a human.
+const withoutApproved = text.replace(/\$\s?1,?000(\.00)?(\s?(usd|dollars))?\+?/gi, ' ');
+const priceClaim = valid && /\$\s?\d|\b\d[\d,.]*\s?(usd|dollars)\b/i.test(withoutApproved);
+// Flags from the model: anything other than "none" means a human must look first (support, billing, complaint, unsubscribe).
+const flag = valid ? String(draft.flag || 'none').toLowerCase() : 'none';
+const flagged = flag !== 'none' || /\btrials?\b/i.test(text); // a reply that talks about a trial is never sent unreviewed
+const showBooking = !(valid && draft.include_booking_button === false) && String(ctx.lead.stage || '') !== 'BOOKED' && !flagged;
 const paras = escHtml(text).split(/\n{2,}/).map(p => '<p style="margin:0 0 14px 0">' + p.replace(/\n/g, '<br>') + '</p>').join('');
 let slotsHtml = '';
 let slotsText = '';
-if (ctx.offered.length) {
+if (showBooking && ctx.offered.length) {
   const linked = ctx.offered.every(s => !!s.link);
   slotsHtml += '<p style="margin:0 0 8px 0">Pick a time that suits you:</p>';
   for (const s of ctx.offered) {
@@ -370,16 +386,17 @@ if (ctx.offered.length) {
   if (!linked) slotsHtml += '<p style="margin:8px 0 14px 0">Reply with the one you prefer and I will book it.</p>';
   slotsText = '\n\nTimes offered:\n' + ctx.offered.map(s => '- ' + s.label).join('\n');
 }
-const tail = '<p style="margin:14px 0 0 0;color:#475569">Prefer another time? <a href="' + escHtml(booking) + '">Choose one here</a>.</p>';
-const html = valid ? paras + slotsHtml + tail : '';
-const offerText = valid ? text + slotsText : '';
+const tail = showBooking ? '<p style="margin:14px 0 0 0;color:#475569">Prefer another time? <a href="' + escHtml(booking) + '">Choose one here</a>.</p>' : '';
+const signHtml = '<p style="margin:18px 0 0 0">' + escHtml(ctx.signOff).replace(/\n/g, '<br>') + '</p>';
+const html = valid ? paras + slotsHtml + tail + signHtml : '';
+const offerText = valid ? text + slotsText + '\n\n' + ctx.signOff : '';
 
 const auto = String($env.AI_AUTO_REPLY || 'false').toLowerCase() === 'true';
 const canThread = !!(ctx.ids.leadId && ctx.ids.replyMessageId && ctx.ids.campaignId);
 let autoSend = false;
-if (auto && valid && canThread && !accept) {
+if (auto && valid && canThread && !accept && !flagged && !priceClaim && draft.safe_to_send !== false) {
   if (ctx.intent === 'Positive_Booking_Intent' && ctx.confidence >= 0.6) autoSend = true;
-  if (ctx.intent === 'Question_Needs_FollowUp' && ctx.confidence >= 0.8 && draft.safe_to_send === true && !priceClaim) autoSend = true;
+  if (ctx.intent === 'Question_Needs_FollowUp' && ctx.confidence >= 0.8 && draft.safe_to_send === true) autoSend = true;
 }
 const sendPayload = valid ? Object.assign({ lead_id: Number(ctx.ids.leadId), email_body: html, reply_message_id: ctx.ids.replyMessageId, reply_email_time: new Date().toISOString() }, ctx.ids.statsId ? { email_stats_id: ctx.ids.statsId } : {}) : null;
 return [{ json: { ctx: { ...ctx, draft, accept, autoSend, offerText, sendPayload } } }];

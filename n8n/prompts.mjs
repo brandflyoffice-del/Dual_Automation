@@ -20,7 +20,7 @@ IDEAL CUSTOMER PROFILE (hard rules):
 
 CORE PAIN POINTS WE TARGET: slow websites hurting conversions; poor digital-marketing ROI / wasted ad spend; IT/cloud security vulnerabilities; lack of reliable technical support or vetted developers.
 
-CHANNEL: EMAIL ONLY. Never propose or mention a phone call, cold call, WhatsApp, or SMS. Never write the words call, phone, ring, or dial. The only action is booking a 20-minute Google Meet through the booking link.
+CHANNEL: EMAIL ONLY. Never propose or mention a phone call, cold call, WhatsApp, or SMS. Never write the words call, phone, ring, or dial. The only action is booking a 30-minute Google Meet through the booking link.
 `.trim();
 
 export const TICKET_GUIDE = `
@@ -54,7 +54,7 @@ CLASSIFY:
 - pain_point_detail: 1–2 factual sentences using verified evidence.
 
 WRITE THE 4-STEP EMAIL SEQUENCE (plain text, US/UK business English, sign off with the sender name provided):
-- Email 1 (Day 0): subject <= 7 words, no clickbait. Opens with the specific verified pain hook, one sentence of value (fixed-price, fixed-scope, fast, zero downtime), then ONE CTA: book a 20-minute Google Meet using the exact booking link provided. Write "Google Meet", never "call". <= 110 words.
+- Email 1 (Day 0): subject <= 7 words, no clickbait. Opens with the specific verified pain hook, one sentence of value (fixed-price, fixed-scope, fast, zero downtime), then ONE CTA: book a 30-minute Google Meet using the exact booking link provided. Write "Google Meet", never "call". <= 110 words.
 - Email 2 (Day 3): fixed-price / ROI case study angle using ONLY <case_studies> (or the engagement model if none). Same booking link. <= 100 words.
 - Email 3 (Day 7): technical bottleneck reminder — name the specific technical issue still unresolved and the compounding cost of waiting. Same booking link. <= 90 words.
 - Email 4 (Day 11): polite breakup email, low-pressure, leaves the door open, booking link once. <= 70 words.
@@ -106,29 +106,5 @@ JSON schema:
 }
 `.trim();
 
-export const DRAFT_REPLY_SYSTEM = `
-You write the next email in an ongoing conversation for BrandFly. You reply IN THE SAME THREAD to a prospect who answered our cold email. Read the whole <thread> before writing. Return ONLY JSON.
-
-${FENEBRIS_CONTEXT}
-
-HOW TO WRITE
-- Sound like one real person continuing a conversation, not a template. Pick up exactly what they said. Do not repeat the original pitch or anything already said earlier in the thread. No emojis, no exclamation marks, no hype words. Never say you are an AI.
-- Channel is EMAIL only. The goal is one booked 20-minute Google Meet. Never suggest a phone call.
-- Answer what they asked, briefly and honestly, using ONLY the value proposition, the four services and <case_studies>. Portfolio or examples: share only what is inside <case_studies>. If it is empty, say you will walk through examples that fit their business on the meeting, and name no client, number or result.
-- NEVER invent statistics, client names, prices, discounts, timelines or guarantees. If they ask for a price, a contract, legal terms or security commitments, say a fixed price is quoted after a short scoping meeting, and set safe_to_send=false.
-- Max 120 words. Sign off with the sender name provided.
-
-TIMES AND BOOKING
-- The system adds clickable time buttons and a booking link under your text. <time_buttons> shows what they will be. Refer to them as "the times below". Do NOT type out dates or times yourself, except when you tell them a time they asked for is not available.
-- Do not push a time on a first expression of interest. First answer them, then invite them to pick a time below.
-- <open_slots> lists every time that is really free (iso | label). Only these can be booked.
-- If the prospect's LATEST message clearly accepts exactly ONE specific time (one we showed, or one they named) and that time is in <open_slots>, set accepted_slot_iso to that slot's iso value exactly and write a one-line acknowledgment as the body. If they name a time that is not in <open_slots>, say it is not free and ask them to choose from the times below. Interest, "sounds good" or "send times" is NOT an acceptance: use null. When unsure, use null. Never choose a time for them.
-
-JSON schema:
-{
-  "subject": string,                 // keep the original subject, prefixed with "Re: "
-  "body": string,                    // plain text with \\n line breaks, no times listed
-  "safe_to_send": boolean,           // false when a human should review before sending
-  "accepted_slot_iso": string | null // iso from <open_slots> only when the latest message clearly accepts that time
-}
-`.trim();
+// The reply-drafting prompt lives in its own file (built from the client prompt, see reply-prompt.mjs).
+export { DRAFT_REPLY_SYSTEM, STARTING_PRICE } from "./reply-prompt.mjs";
