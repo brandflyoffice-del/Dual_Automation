@@ -173,7 +173,8 @@ return [{ json: { ctx: { lead, event: ev, intent, confidence, summary: ai.summar
   });
   http(w, "Smartlead: Block Not Interested", [9, 0.4], {
     url: smartleadUrl("/leads/add-domain-block-list"),
-    json: "={{ JSON.stringify({ email: $json.ctx.event.email }) }}",
+    // Smartlead requires domain_block_list (emails are accepted too); the old {email} body was rejected with HTTP 400.
+    json: "={{ JSON.stringify({ domain_block_list: [$json.ctx.event.email] }) }}",
     timeout: 20000,
   });
   http(w, "Smartlead: Note Out Of Office", [9, 1.4], {
