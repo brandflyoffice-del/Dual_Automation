@@ -343,7 +343,9 @@ async function main() {
   const ALL_ROWS: Row[] = [...ROWS, ...extraRows(112, taken)];
 
   for (const [i, r] of ALL_ROWS.entries()) {
-    const [first, last, role, company, domain, country, region, industry, revenueK, employees, pain, service, score, ticket, stage, daysAgo] = r;
+    const [first, last, role, company, domain, country, region, industry, revenueK, employees, pain, service, score, ticketModel, stage, daysAgo] = r;
+    // Opportunity value on the per-user price scale ($100 to $200), mapped from the old $1k to $25k model so the dashboard totals stay small.
+    const ticket = Math.round((100 + ((ticketModel - 1000) / 24000) * 100) / 10) * 10;
     const a = audit(pain, r);
     const p = painTexts(pain, a, r)!;
     const emails = buildEmails(r, p);

@@ -8,6 +8,7 @@ import { LaunchCampaign } from "@/components/launch-campaign";
 import { Badge } from "@/components/ui/badge";
 import { ServiceBadge, RegionBadge } from "@/components/badges";
 import { getDashboardData } from "@/lib/queries";
+import { ICP } from "@/lib/constants";
 import { formatDateTime, formatPct, formatUsd } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -90,7 +91,7 @@ export default async function DashboardPage() {
         <Kpi
           label="Total pipeline value"
           value={formatUsd(kpis.pipelineValue, true)}
-          sub={`${kpis.pipelineMeetings} meetings · $1k–$25k / opp.`}
+          sub={`${kpis.pipelineMeetings} meetings · ${formatUsd(ICP.minTicket)}–${formatUsd(ICP.maxTicketModel)} / opp.`}
           icon={DollarSign}
           className="col-span-2 lg:col-span-3 xl:col-span-1"
         />
@@ -170,7 +171,7 @@ export default async function DashboardPage() {
             <ServiceChart data={services} />
             <div className="mt-3 flex items-center gap-2 text-[11px] text-muted-foreground">
               <TrendingUp className="size-3.5 text-emerald" />
-              Pipeline per pillar at $1k–$25k per qualified opportunity.
+              Pipeline per pillar at {formatUsd(ICP.minTicket)}–{formatUsd(ICP.maxTicketModel)} per qualified opportunity.
             </div>
           </CardContent>
         </Card>

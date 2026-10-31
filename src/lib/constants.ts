@@ -40,8 +40,8 @@ export const ICP = {
   industries: ["ECOMMERCE_RETAIL", "FINTECH", "REAL_ESTATE_LOGISTICS", "EDTECH", "HOSPITALITY"] as const,
   revenueMin: 100_000,
   revenueMax: 10_000_000,
-  minTicket: 1_000,
-  maxTicketModel: 25_000,
+  minTicket: 100, // dashboard floor/ceiling for an opportunity value (pricing here starts at $100 per user per month; the n8n ticket gate is off)
+  maxTicketModel: 200,
 } as const;
 
 export type Region = (typeof ICP.regions)[number];
