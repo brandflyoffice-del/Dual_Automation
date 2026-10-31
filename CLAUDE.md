@@ -21,6 +21,7 @@ Next.js 15 dashboard (port **3400**, light theme, brand "BrandFly") + Postgres 1
 ```
 npm run dev | build | start | lint | typecheck
 npm run db:up | db:push | db:studio
+npm run demo:load | demo:remove   # additive fictional data tagged source="demo"; remove deletes exactly that (db:seed wipes everything, never use it on live)
 npm run init:secrets
 npm run n8n:build            # merge + validate + bake -> n8n/workflows/Fenebris_Outreach_Autopilot.json
 npm run n8n:push:docker      # CLI import (then: docker restart n8nangravtity-n8n-1)

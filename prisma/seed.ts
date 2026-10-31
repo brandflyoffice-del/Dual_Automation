@@ -297,13 +297,31 @@ function slotEmail(first: string, slots: string[]) {
   return `Hi ${first},\n\nGreat to hear it. Here are three times that work on our side:\n${slots.map((s) => `• ${s}`).join("\n")}\n\nOr pick any slot that suits you: ${BOOKING}\n\nBest,\nFenebris Team`;
 }
 
+// `--demo` adds the fictional data WITHOUT deleting anything and tags every lead source="demo"; `--remove-demo` removes exactly that.
+// Plain `seed` still wipes every table first (local use only, never against the live database).
+const DEMO = process.argv.includes("--demo");
+const REMOVE_DEMO = process.argv.includes("--remove-demo");
+
+async function removeDemo() {
+  const reports = await db.weeklyReport.deleteMany({ where: { shareToken: { startsWith: "demo" } } });
+  const leads = await db.lead.deleteMany({ where: { source: "demo" } }); // sequences, events and meetings cascade
+  console.log(`Removed ${leads.count} demo leads (and their emails, events, meetings) and ${reports.count} demo reports.`);
+}
+
 async function main() {
-  console.log("Resetting tables…");
-  await db.weeklyReport.deleteMany();
-  await db.meeting.deleteMany();
-  await db.emailEvent.deleteMany();
-  await db.campaignSequence.deleteMany();
-  await db.lead.deleteMany();
+  if (REMOVE_DEMO) return removeDemo();
+  if (DEMO && (await db.lead.count({ where: { source: "demo" } })) > 0) {
+    console.log("Demo data is already loaded. Run with --remove-demo first to reload.");
+    return;
+  }
+  if (!DEMO) {
+    console.log("Resetting tables…");
+    await db.weeklyReport.deleteMany();
+    await db.meeting.deleteMany();
+    await db.emailEvent.deleteMany();
+    await db.campaignSequence.deleteMany();
+    await db.lead.deleteMany();
+  }
 
   // Meeting plan keyed by lead first name. `soonMin` = minutes from now (to demo live countdown),
   // otherwise `day` business days away at local `hh:mm` in the prospect's timezone.
@@ -383,8 +401,9 @@ async function main() {
         replySentiment: sentiment,
         needsHuman: stage === "REPLIED" && sentiment === "Question_Needs_FollowUp",
         repliedAt,
-        outreachLeadId: verified ? `inst_${1000 + i}` : null,
+        outreachLeadId: verified ? `${DEMO ? "demo" : "inst"}_${1000 + i}` : null,
         campaignId: "camp_fenebris_icp_q4",
+        ...(DEMO ? { source: "demo" } : {}),
         createdAt: new Date(started - 6 * H),
       },
     });
@@ -506,7 +525,7 @@ async function main() {
     await db.weeklyReport.create({
       data: {
         weekStart: s, weekEnd: e, metrics: metrics as unknown as Prisma.InputJsonValue,
-        shareToken: Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10),
+        shareToken: (DEMO ? "demo" : "") + Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10),
       },
     });
   }
