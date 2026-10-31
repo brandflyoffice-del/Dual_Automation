@@ -303,7 +303,7 @@ const DEMO = process.argv.includes("--demo");
 const REMOVE_DEMO = process.argv.includes("--remove-demo");
 
 async function removeDemo() {
-  const reports = await db.weeklyReport.deleteMany({ where: { shareToken: { startsWith: "demo" } } });
+  const reports = await db.weeklyReport.deleteMany({ where: { shareToken: { startsWith: "d3m0" } } });
   const leads = await db.lead.deleteMany({ where: { source: "demo" } }); // sequences, events and meetings cascade
   console.log(`Removed ${leads.count} demo leads (and their emails, events, meetings) and ${reports.count} demo reports.`);
 }
@@ -525,7 +525,7 @@ async function main() {
     await db.weeklyReport.create({
       data: {
         weekStart: s, weekEnd: e, metrics: metrics as unknown as Prisma.InputJsonValue,
-        shareToken: (DEMO ? "demo" : "") + Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10),
+        shareToken: (DEMO ? "d3m0" : "") + Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10),
       },
     });
   }
