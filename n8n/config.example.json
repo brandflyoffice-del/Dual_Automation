@@ -24,5 +24,6 @@
   "CASE_STUDIES": "",
   "DAILY_LEAD_LIMIT": "40",
   "TICKET_GATE": "on",
+  "CALENDAR_DOSSIER": "off",
   "AI_AUTO_REPLY": "true"
 }

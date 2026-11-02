@@ -82,6 +82,9 @@ services:
     environment:
       APP_DOMAIN: ${APP_DOMAIN}
       N8N_DOMAIN: ${N8N_DOMAIN}
+      # Previous hostnames after a domain move, still served so old webhook URLs, time buttons and bookmarks keep working.
+      APP_DOMAIN_OLD: ${APP_DOMAIN_OLD:-}
+      N8N_DOMAIN_OLD: ${N8N_DOMAIN_OLD:-}
       DASH_USER: ${DASH_USER}
       DASH_PASS_HASH: ${DASH_PASS_HASH}
     volumes:

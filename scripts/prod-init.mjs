@@ -50,6 +50,9 @@ const localEnv = readEnv(join(root, ".env"));
 const env = {
   APP_DOMAIN: appDomain,
   N8N_DOMAIN: n8nDomain,
+  // On a domain move the old hostnames stay served (Caddy) so existing webhooks and emailed links keep working.
+  APP_DOMAIN_OLD: prev.APP_DOMAIN && prev.APP_DOMAIN !== appDomain ? prev.APP_DOMAIN : prev.APP_DOMAIN_OLD || "",
+  N8N_DOMAIN_OLD: prev.N8N_DOMAIN && prev.N8N_DOMAIN !== n8nDomain ? prev.N8N_DOMAIN : prev.N8N_DOMAIN_OLD || "",
   TZ: "Asia/Kolkata",
   POSTGRES_PASSWORD: keep("POSTGRES_PASSWORD", () => secret(24)),
   N8N_ENCRYPTION_KEY: keep("N8N_ENCRYPTION_KEY", () => secret(24)),

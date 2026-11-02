@@ -178,6 +178,11 @@ export async function POST(req: Request) {
           EMAIL_SENT: "Email sent", EMAIL_OPENED: "Email opened", LINK_CLICKED: "Link clicked",
           REPLY_RECEIVED: "Reply received", EMAIL_BOUNCED: "Email bounced", AI_REPLY_SENT: "AI reply sent",
         };
+        if (data.sentiment === "Unknown_Sender") {
+          // n8n does not auto-answer people who are not in the leads table; a person must reply from the Smartlead inbox.
+          publish({ type: event, title: "Reply from someone not in your leads", detail: `${data.email} · answer it in the Smartlead inbox` });
+          break;
+        }
         publish({ type: event, title: label[data.type] ?? "Outreach event", detail: [data.email, data.sentiment].filter(Boolean).join(" · ") });
         break;
       }

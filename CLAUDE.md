@@ -31,7 +31,7 @@ npm run deploy:init -- --app app.<domain> --n8n n8n.<domain> --host <ip>   # wri
 npm run deploy -- --setup | --init                                         # one-time server prep / settings upload
 npm run deploy               # ships committed code to the VPS (also what GitHub Actions runs on push to main)
 ```
-Production hosting is described in AGENTS.md §11. It was written but **not yet run on the server**; the user said not to deploy until told.
+Production hosting is described in AGENTS.md §11. It is live; every push to `main` deploys through GitHub Actions. Client-editable settings (reply prompt, logo, services, meeting alerts) live in the `app_settings` table and n8n reads them at run time.
 n8n 2.x blocks `$env.*`, so config is baked at build time. Never CLI-import unless the Google credential ids in the built JSON match the attached ones (see AGENTS.md §6).
 
 ## Editing conventions

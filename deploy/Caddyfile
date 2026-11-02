@@ -1,7 +1,8 @@
 # Caddy gets and renews HTTPS certificates by itself (Let's Encrypt).
 # APP_DOMAIN / N8N_DOMAIN / DASH_USER / DASH_PASS_HASH come from /opt/fenebris/.env (see deploy/docker-compose.prod.yml).
 
-{$APP_DOMAIN} {
+# *_OLD are the previous hostnames after a domain move (empty otherwise), so links that point at them keep working.
+{$APP_DOMAIN} {$APP_DOMAIN_OLD} {
 	encode zstd gzip
 
 	# The dashboard has no login of its own, so the whole thing sits behind HTTP basic auth.
@@ -22,7 +23,7 @@
 	}
 }
 
-{$N8N_DOMAIN} {
+{$N8N_DOMAIN} {$N8N_DOMAIN_OLD} {
 	encode zstd gzip
 	reverse_proxy n8n:5678
 }

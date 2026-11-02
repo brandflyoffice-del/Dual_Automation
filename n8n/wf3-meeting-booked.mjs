@@ -1,4 +1,4 @@
-import { Workflow, webhook, respond, ifNode, http, code, postgres, sticky, dashboardNotify, smartleadUrl, uid, googleCalendarIdNode, calExpr } from "./lib.mjs";
+import { Workflow, webhook, respond, ifNode, http, code, postgres, sticky, dashboardNotify, smartleadUrl, uid, googleCalendarIdNode, calExpr, PG_CRED_ID, PG_CRED_NAME } from "./lib.mjs";
 
 export const SHEET_TAB = "Scheduled Meetings";
 export const SHEET_COLUMNS = [
@@ -62,6 +62,7 @@ ins AS (
     r.d->>'meetLink', r.d->>'calendarEventId', r.d->>'calendarEventUrl', r.d->>'status', (r.d->>'estimatedTicket')::int, now()
   FROM lead, r
   WHERE NOT EXISTS (SELECT 1 FROM upd)
+  ON CONFLICT (cal_booking_uid) DO NOTHING
   RETURNING id
 ),
 lead_upd AS (
@@ -174,14 +175,29 @@ return [{ json: {
     { alwaysOutput: true },
   );
 
+  // Team members from the dashboard (Settings > Meeting alerts) are invited to every meeting. Always one row; a missing table = nobody.
+  w.add(
+    "DB: Meeting Alert Settings",
+    "n8n-nodes-base.postgres",
+    2.5,
+    [5.5, -0.5],
+    { operation: "executeQuery", query: "select (select value from app_settings where key = 'meeting_alerts') as alerts", options: {} },
+    { credentials: { postgres: { id: PG_CRED_ID, name: PG_CRED_NAME } }, alwaysOutputData: true, executeOnce: true, onError: "continueRegularOutput" },
+  );
+
   code(
     w,
     "Build Meeting Context + Dossier",
     [6, -0.5],
     String.raw`
 const bk = $('Normalize Booking').first().json;
-const row = $input.first().json || {};
+const row = $('DB: Lookup Prospect Enrichment').first().json || {};
 const known = !!row.id;
+const alerts = ((($input.first() || {}).json || {}).alerts) || {};
+const team = (Array.isArray(alerts.emails) ? alerts.emails : [])
+  .map(e => String(e || '').trim().toLowerCase())
+  .filter(e => /^[^\s@,]+@[^\s@,]+\.[^\s@,]{2,}$/.test(e) && e !== bk.email)
+  .slice(0, 10);
 const IST = 'Asia/Kolkata';
 const fmt = (iso, tz) => new Intl.DateTimeFormat('en-GB', { timeZone: tz, weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(iso));
 const money = n => Number(n || 0).toLocaleString('en-US');
@@ -233,7 +249,12 @@ if (known) {
   L.push('NOTE: this prospect was not found in the Fenebris lead database (booked directly via the booking link). No enrichment available.');
 }
 L.push('Live brief + scratchpad: ' + ($env.DASHBOARD_URL || '') + '/meetings');
-const description = L.join('\n');
+// The prospect is a guest on this event and can read its description, so the internal dossier (pain points, talking points,
+// email thread) is only written there when CALENDAR_DOSSIER=on. Otherwise the team reads it on the dashboard Meetings page.
+const brandName = String(known ? row.campaign_id : '') === '4238487' ? 'Expert in SEO' : 'TapadiaTech';
+const neutral = 'Free 30-minute consultation: ' + prospect + (company ? ' (' + company + ')' : '') + ' and ' + brandName + '.\n' +
+  'Join with the Google Meet link on this invite.\n\nTo move or cancel, use the link in your booking confirmation email.';
+const description = $env.CALENDAR_DOSSIER === 'on' ? L.join('\n') : neutral;
 
 const linkedin = known && row.linkedin_url ? row.linkedin_url : '';
 const sheetRow = {
@@ -246,6 +267,7 @@ const sheetRow = {
 };
 const t0 = new Date(bk.startTime).getTime();
 return [{ json: { bk, known, title, description, sheetRow, ticket, company, prospect, role, campaignId: known ? row.campaign_id : null,
+  team, guests: [bk.email].concat(team).join(','),
   existingEventId: row.existing_event_id || null,
   window: { min: new Date(t0 - 36 * 3600000).toISOString(), max: new Date(t0 + 36 * 3600000).toISOString() } } }];
 `,
@@ -267,7 +289,7 @@ return [{ json: { bk, known, title, description, sheetRow, ticket, company, pros
       timeMax: "={{ $json.window.max }}",
       options: { query: "={{ $json.bk.email }}", singleEvents: true },
     },
-    { credentials: GCRED, alwaysOutputData: true, executeOnce: true },
+    { credentials: GCRED, alwaysOutputData: true, executeOnce: true, onError: "continueRegularOutput" },
   );
   code(
     w,
@@ -295,7 +317,7 @@ return [{ json: { ...ctx, eventId } }];
     1.3,
     [11, -1.9],
     { resource: "event", operation: "delete", calendar: CAL, eventId: "={{ $json.eventId }}", options: { sendUpdates: "all" } },
-    { credentials: GCRED },
+    { credentials: GCRED, onError: "continueRegularOutput" },
   );
   w.add(
     "Google Calendar: Update Event (title + dossier)",
@@ -315,8 +337,33 @@ return [{ json: { ...ctx, eventId } }];
         end: "={{ $json.bk.endTime }}",
       },
     },
-    { credentials: GCRED },
+    { credentials: GCRED, onError: "continueRegularOutput" },
   );
+  // Same update, plus the team from Settings > Meeting alerts added as guests (existing guests kept). Google emails them the
+  // invitation with the Meet button; the prospect gets an "updated invitation" notice.
+  w.add(
+    "Google Calendar: Update Event (+ team guests)",
+    "n8n-nodes-base.googleCalendar",
+    1.3,
+    [11, 0.45],
+    {
+      resource: "event",
+      operation: "update",
+      calendar: CAL,
+      eventId: "={{ $json.eventId }}",
+      useDefaultReminders: true,
+      updateFields: {
+        summary: "={{ $json.title }}",
+        description: "={{ $json.description }}",
+        start: "={{ $json.bk.startTime }}",
+        end: "={{ $json.bk.endTime }}",
+        attendeesUi: { values: { mode: "add", attendees: ["={{ $json.team.join(',') }}"] } },
+        sendUpdates: "all",
+      },
+    },
+    { credentials: GCRED, onError: "continueRegularOutput" },
+  );
+  ifNode(w, "Team Guests? (update)", [10.5, -0.1], "={{ ($json.team || []).length > 0 }}");
   w.add(
     "Google Calendar: Create Event (+ Google Meet)",
     "n8n-nodes-base.googleCalendar",
@@ -332,12 +379,12 @@ return [{ json: { ...ctx, eventId } }];
       additionalFields: {
         summary: "={{ $json.title }}",
         description: "={{ $json.description }}",
-        attendees: ["={{ $json.bk.email }}"],
+        attendees: ["={{ $json.guests }}"],
         conferenceDataUi: { conferenceDataValues: { conferenceSolution: "hangoutsMeet" } },
         sendUpdates: "all",
       },
     },
-    { credentials: GCRED },
+    { credentials: GCRED, onError: "continueRegularOutput" },
   );
 
   code(
@@ -434,6 +481,7 @@ return [{ json: { id, campaignId } }];
     "Google: Calendar Id (Meetings)",
     "Normalize Booking",
     "DB: Lookup Prospect Enrichment",
+    "DB: Meeting Alert Settings",
     "Build Meeting Context + Dossier",
     "Google Calendar: Find Existing Event",
     "Pick Event To Sync",
@@ -443,7 +491,10 @@ return [{ json: { id, campaignId } }];
   w.connect("Cancelled?", "Event Exists? (upsert path)", 1);
   w.connect("Event Exists? (cancel path)", "Google Calendar: Delete Cancelled Event", 0);
   w.connect("Event Exists? (cancel path)", "Prepare Sync Payload", 1);
-  w.connect("Event Exists? (upsert path)", "Google Calendar: Update Event (title + dossier)", 0);
+  w.connect("Event Exists? (upsert path)", "Team Guests? (update)", 0);
+  w.connect("Team Guests? (update)", "Google Calendar: Update Event (+ team guests)", 0);
+  w.connect("Team Guests? (update)", "Google Calendar: Update Event (title + dossier)", 1);
+  w.connect("Google Calendar: Update Event (+ team guests)", "Prepare Sync Payload");
   w.connect("Event Exists? (upsert path)", "Google Calendar: Create Event (+ Google Meet)", 1);
   w.connect("Google Calendar: Delete Cancelled Event", "Prepare Sync Payload");
   w.connect("Google Calendar: Update Event (title + dossier)", "Prepare Sync Payload");

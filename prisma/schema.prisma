@@ -130,3 +130,14 @@ model WeeklyReport {
 
   @@map("weekly_reports")
 }
+
+/// Settings the client edits in the dashboard (Settings and Services pages). n8n reads some keys at run time:
+/// reply_prompt {prompt, startingPrice} (lane 2 draft) and meeting_alerts {emails} (lane 3 calendar guests).
+/// Other keys: brand {name, logo}, service_lines [...]. A missing key means "use the built-in default".
+model AppSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("app_settings")
+}

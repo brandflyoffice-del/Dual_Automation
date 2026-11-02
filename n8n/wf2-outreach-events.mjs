@@ -1,5 +1,5 @@
-import { Workflow, webhook, respond, respondHtml, ifNode, switchNode, http, code, postgres, sticky, dashboardNotify, smartleadUrl, googleCalendarIdNode, calExpr } from "./lib.mjs";
-import { CLASSIFY_REPLY_SYSTEM, DRAFT_REPLY_SYSTEM, STARTING_PRICE } from "./prompts.mjs";
+import { Workflow, webhook, respond, respondHtml, ifNode, switchNode, http, code, postgres, sticky, dashboardNotify, smartleadUrl, googleCalendarIdNode, calExpr, PG_CRED_ID, PG_CRED_NAME } from "./lib.mjs";
+import { CLASSIFY_REPLY_SYSTEM, DRAFT_REPLY_TEMPLATE, PRICE_TOKEN, STARTING_PRICE } from "./prompts.mjs";
 import { SIGN_JS, FMT_JS, PAGE_JS } from "./helpers.mjs";
 
 const GCRED = { googleCalendarOAuth2Api: { id: "y5FL0LJTf7OK7BZo", name: "Google Calendar account" } };
@@ -10,7 +10,9 @@ const LEAD_CONTEXT_SQL = `SELECT l.id, l.email, l.first_name, l.company_name, l.
      FROM campaign_sequences cs WHERE cs.lead_id = l.id AND cs.status = 'SENT') AS sent_emails,
   (SELECT e.external_id FROM email_events e WHERE e.lead_id = l.id AND e.external_id IS NOT NULL ORDER BY e.occurred_at DESC LIMIT 1) AS reply_to_id,
   (SELECT e.eaccount FROM email_events e WHERE e.lead_id = l.id AND e.eaccount IS NOT NULL ORDER BY e.occurred_at DESC LIMIT 1) AS eaccount,
-  (SELECT e.subject FROM email_events e WHERE e.lead_id = l.id AND e.subject IS NOT NULL ORDER BY e.occurred_at DESC LIMIT 1) AS last_subject
+  (SELECT e.subject FROM email_events e WHERE e.lead_id = l.id AND e.subject IS NOT NULL ORDER BY e.occurred_at DESC LIMIT 1) AS last_subject,
+  (SELECT m.start_time FROM meetings m WHERE m.lead_id = l.id AND m.status IN ('SCHEDULED', 'RESCHEDULED') AND m.start_time > now()
+     ORDER BY m.start_time LIMIT 1) AS next_meeting
 FROM leads l WHERE l.email = lower($1) LIMIT 1;`;
 
 const RECORD_EVENT_SQL = `WITH r AS (SELECT $1::jsonb AS d),
@@ -55,6 +57,8 @@ UPDATE leads l SET
   replied_at = CASE WHEN r.d->>'type' = 'REPLY_RECEIVED' THEN now() ELSE l.replied_at END,
   needs_human = CASE WHEN r.d->>'type' = 'REPLY_RECEIVED' THEN coalesce((r.d->>'needsHuman')::boolean, false) ELSE l.needs_human END,
   sequence_paused = CASE WHEN r.d->>'type' = 'REPLY_RECEIVED' AND coalesce(r.d->>'sentiment','') <> 'Out_Of_Office' THEN true ELSE l.sequence_paused END,
+  -- Smartlead's add-leads call returns no id; every webhook carries it, so keep the first one we see (needed to reply in the thread).
+  outreach_lead_id = coalesce(nullif(l.outreach_lead_id, ''), nullif(r.d->>'smartleadLeadId', '')),
   updated_at = now()
 FROM lead, r
 WHERE l.id = lead.id
@@ -97,8 +101,8 @@ let step = parseInt(b.step ?? b.sequence_number ?? b.sequence_step ?? 1, 10);
 if (!Number.isFinite(step)) step = 1;
 step = Math.min(4, Math.max(1, step));
 const replyObj = b.reply_message || {};
-const textRaw = String(b.reply_text || replyObj.text || b.preview_text || b.text_body || '');
-const replyText = textRaw.replace(/<[^>]+>/g, ' ').split(/\r?\n\s*On .{5,200} wrote:|\r?\n-{2,}\s*Original Message|\r?\n>/i)[0].trim();
+const textRaw = String(b.reply_text || replyObj.text || replyObj.html || b.preview_text || b.text_body || '');
+const replyText = textRaw.replace(/<br\s*\/?>|<\/p>|<\/div>/gi, '\n').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').split(/\r?\n\s*On .{5,200} wrote:|\r?\n-{2,}\s*Original Message|\r?\n>/i)[0].trim();
 let occurredAt = new Date().toISOString();
 const stamp = b.event_timestamp || b.timestamp || b.time_replied || b.time_sent;
 if (stamp && !isNaN(new Date(stamp))) occurredAt = new Date(stamp).toISOString();
@@ -118,7 +122,22 @@ return [{ json: { type, event: {
   );
   ifNode(w, "Is Reply?", [3, 0], "={{ $json.type === 'REPLY_RECEIVED' }}");
 
-  postgres(w, "DB: Get Lead Context", [4, -1], LEAD_CONTEXT_SQL, "={{ [$json.event.email] }}");
+  // seen_reply > 0 means this exact reply (same message id) was already handled: a repeated webhook delivery must not answer twice.
+  const LEAD_CONTEXT_SEEN_SQL = LEAD_CONTEXT_SQL.replace(
+    "AS next_meeting\n",
+    "AS next_meeting,\n  (SELECT count(*) FROM email_events e WHERE e.lead_id = l.id AND e.type = 'REPLY_RECEIVED' AND e.external_id = nullif($2, '')) AS seen_reply\n",
+  );
+  if (LEAD_CONTEXT_SEEN_SQL === LEAD_CONTEXT_SQL) throw new Error("wf2: seen_reply column was not added");
+  postgres(w, "DB: Get Lead Context", [4, -1], LEAD_CONTEXT_SEEN_SQL, "={{ [$json.event.email, $json.event.externalId || ''] }}", { alwaysOutput: true });
+  // A reply from an address that is not in our leads table (forwarded to a colleague, or added to Smartlead by hand) is never
+  // auto-answered. It stays in Smartlead's inbox and the dashboard shows an alert so a person answers it.
+  ifNode(w, "Known Lead?", [4.5, -1], "={{ !!$json.id }}");
+  dashboardNotify(
+    w,
+    "Dashboard: Reply From Unknown Sender",
+    [5, -0.2],
+    "={{ JSON.stringify({ event: 'email_event', ingest: false, data: { email: $('Normalize Event').first().json.event.email, type: 'REPLY_RECEIVED', sentiment: 'Unknown_Sender', needsHuman: true, stage: 'NOT_IN_DATABASE' } }) }}",
+  );
 
   code(
     w,
@@ -127,6 +146,7 @@ return [{ json: { type, event: {
     "const SYSTEM = " + JSON.stringify(CLASSIFY_REPLY_SYSTEM) + ";\n" + String.raw`
 const lead = $input.first().json;
 const ev = $('Normalize Event').first().json.event;
+if (Number(lead.seen_reply || 0) > 0) return []; // duplicate delivery of a reply we already handled
 const sent = (lead.sent_emails || []).filter(e => e.step <= ev.step).pop() || {};
 const user = '<our_last_email subject="' + (sent.subject || '') + '">\n' + (sent.body || '') + '\n</our_last_email>\n<prospect_reply>\n' + (ev.body || '(empty reply)') + '\n</prospect_reply>';
 return [{ json: { classifyRequest: { model: $env.OPENAI_MODEL || 'gpt-4o', temperature: 0, response_format: { type: 'json_object' },
@@ -196,7 +216,7 @@ return [{ json: { event: { ...c.event, sentiment: c.intent, needsHuman: false, a
   /* ═════ Shared: thread → open slots → AI draft → send OR book ═════ */
   http(w, "Smartlead: Get Thread", [10, -1], {
     method: "GET",
-    url: smartleadUrl("/campaigns/{{ $json.ctx.lead.campaign_id || $json.ctx.event.campaignId }}/leads/{{ $json.ctx.event.smartleadLeadId || $json.ctx.lead.outreach_lead_id }}/message-history"),
+    url: smartleadUrl("/campaigns/{{ $json.ctx.event.campaignId || $json.ctx.lead.campaign_id }}/leads/{{ $json.ctx.event.smartleadLeadId || $json.ctx.lead.outreach_lead_id }}/message-history"),
     timeout: 20000,
   });
   code(
@@ -214,7 +234,8 @@ const clean = h => String(h || '')
 const lastReply = [...hist].reverse().find(h => h.type === 'REPLY');
 const thread = hist.slice(-8).map(h => ({ from: h.type === 'REPLY' ? 'prospect' : 'us', at: h.time || null, subject: h.subject || '', text: clean(h.email_body || h.body || '').slice(0, 900) }));
 const ids = {
-  campaignId: ctx.lead.campaign_id || ctx.event.campaignId || null,
+  campaignId: ctx.event.campaignId || ctx.lead.campaign_id || null, // the webhook's campaign is where the thread really lives
+  replyTime: (lastReply && lastReply.time) || null,
   leadId: ctx.event.smartleadLeadId || ctx.lead.outreach_lead_id || null,
   replyMessageId: (lastReply && lastReply.message_id) || ctx.event.externalId || ctx.lead.reply_to_id || null,
   statsId: (lastReply && lastReply.stats_id) || ctx.event.statsId || null,
@@ -259,12 +280,27 @@ return [{ json: { ctx: { ...ctx, tz }, qs: { start: iso(now), end: iso(now + 9 *
     },
     { credentials: GCRED, alwaysOutputData: true, executeOnce: true, onError: "continueRegularOutput" },
   );
+  // The dashboard (Settings > AI reply prompt) may store an edited prompt and starting price. Always one row; a missing table or
+  // key falls back to the built-in prompt below, so the workflow stays usable for projects without that table.
+  w.add(
+    "DB: Reply Prompt Settings",
+    "n8n-nodes-base.postgres",
+    2.5,
+    [13.5, -1],
+    { operation: "executeQuery", query: "select (select value from app_settings where key = 'reply_prompt') as reply", options: {} },
+    { credentials: { postgres: { id: PG_CRED_ID, name: PG_CRED_NAME } }, alwaysOutputData: true, executeOnce: true, onError: "continueRegularOutput" },
+  );
   code(
     w,
     "Build Reply Request",
     [14, -1],
-    "const SYSTEM = " + JSON.stringify(DRAFT_REPLY_SYSTEM) + ";\n" + SIGN_JS + FMT_JS + String.raw`
+    "const DEFAULT_TEMPLATE = " + JSON.stringify(DRAFT_REPLY_TEMPLATE) + ";\nconst DEFAULT_PRICE = " + JSON.stringify(STARTING_PRICE) + ";\nconst PRICE_TOKEN = " + JSON.stringify(PRICE_TOKEN) + ";\n" + SIGN_JS + FMT_JS + String.raw`
 const ctx = $('Build Slots Request').first().json.ctx;
+const rs = ((($('DB: Reply Prompt Settings').first() || {}).json || {}).reply) || {};
+const customPrice = typeof rs.startingPrice === 'string' && /^\$\d{1,3}(,?\d{3})*(\.\d{2})?$/.test(rs.startingPrice.trim());
+const PRICE = customPrice ? rs.startingPrice.trim() : DEFAULT_PRICE;
+const customPrompt = typeof rs.prompt === 'string' && rs.prompt.length > 800;
+const SYSTEM = (customPrompt ? rs.prompt : DEFAULT_TEMPLATE).split(PRICE_TOKEN).join(PRICE);
 const cal = $('Cal.com: Get Open Slots').first().json || {};
 const data = (cal.data && typeof cal.data === 'object') ? cal.data : {};
 const busy = [];
@@ -274,7 +310,7 @@ const walk = o => {
   if (o.start && o.end && !Array.isArray(o)) busy.push([new Date(o.start).getTime(), new Date(o.end).getTime()]);
   for (const k of Object.keys(o)) if (k !== 'busy') walk(o[k]);
 };
-for (const it of $input.all()) walk(it.json);
+for (const it of $('Google Calendar: Busy Times (Offer)').all()) walk(it.json);
 const SLOT_MS = 30 * 60000;
 const isFree = ms => !busy.some(b => ms < b[1] && ms + SLOT_MS > b[0]);
 const days = Object.keys(data).sort();
@@ -336,7 +372,7 @@ const user =
   '<time_buttons>' + (offered.length ? offered.map(s => s.label).join(' ; ') : 'none, only the booking link') + '</time_buttons>\n' +
   '<booking_link>' + booking + '</booking_link>\n<case_studies>' + (($env.CASE_STUDIES) || '') + '</case_studies>\n' +
   '<brand>' + JSON.stringify(brand) + '</brand>\n<lead_stage>' + (ctx.lead.stage || '') + '</lead_stage>';
-return [{ json: { ctx: { ...ctx, brand, signOff, offered, openIsos: openList.map(s => s.iso), openLabels: Object.fromEntries(openList.map(s => [s.iso, s.label])), publicBase, busyCount: busy.length }, draftRequest: { model: $env.OPENAI_MODEL || 'gpt-4o', temperature: 0.3, response_format: { type: 'json_object' },
+return [{ json: { ctx: { ...ctx, approvedPrice: PRICE, promptSource: customPrompt ? 'dashboard' : 'built-in', brand, signOff, offered, openIsos: openList.map(s => s.iso), openLabels: Object.fromEntries(openList.map(s => [s.iso, s.label])), publicBase, busyCount: busy.length }, draftRequest: { model: $env.OPENAI_MODEL || 'gpt-4o', temperature: 0.3, response_format: { type: 'json_object' },
   messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: user }] } } }];
 `,
   );
@@ -350,18 +386,19 @@ return [{ json: { ctx: { ...ctx, brand, signOff, offered, openIsos: openList.map
     w,
     "Parse Draft + Send Policy",
     [16, -1],
-    FMT_JS + "const APPROVED_PRICE = " + JSON.stringify(STARTING_PRICE) + ";\n" + String.raw`
+    FMT_JS + "const DEFAULT_APPROVED_PRICE = " + JSON.stringify(STARTING_PRICE) + ";\n" + String.raw`
 const ctx = $('Build Reply Request').first().json.ctx;
+const APPROVED_PRICE = ctx.approvedPrice || DEFAULT_APPROVED_PRICE; // same figure the prompt was given (dashboard setting or built-in)
 const booking = $env.BOOKING_LINK;
 let draft = null;
 try { draft = JSON.parse($input.first().json.choices[0].message.content); } catch (e) { draft = null; }
 const valid = !!(draft && draft.body && draft.subject && String(draft.body).length < 2500);
 
-// Did the prospect clearly accept one real, free slot? Only then do we book (never on a plain "interested").
-let accept = null;
+// Did the prospect clearly accept one real, free slot? Only then can we book (never on a plain "interested"). The send policy below decides.
+let acceptIso = null;
 if (valid && draft.accepted_slot_iso) {
   const ms = new Date(draft.accepted_slot_iso).getTime();
-  if (isFinite(ms) && ctx.openIsos.some(i => new Date(i).getTime() === ms) && ctx.confidence >= 0.6) accept = new Date(ms).toISOString();
+  if (isFinite(ms) && ctx.openIsos.some(i => new Date(i).getTime() === ms) && ctx.confidence >= 0.6) acceptIso = new Date(ms).toISOString();
 }
 
 // The system adds the sign-off itself; drop one if the model wrote its own anyway.
@@ -394,13 +431,20 @@ const html = valid ? paras + slotsHtml + tail + signHtml : '';
 const offerText = valid ? text + slotsText + '\n\n' + ctx.signOff : '';
 
 const auto = String($env.AI_AUTO_REPLY || 'false').toLowerCase() === 'true';
-const canThread = !!(ctx.ids.leadId && ctx.ids.replyMessageId && ctx.ids.campaignId);
+// Smartlead's reply-email-thread needs the lead id, the message we answer and its email_stats_id.
+const canThread = !!(ctx.ids.leadId && ctx.ids.replyMessageId && ctx.ids.campaignId && ctx.ids.statsId);
+// Booking on a written acceptance follows the same policy as an automatic reply: auto-reply on, nothing flagged, no other price,
+// the model did not ask for review, and no meeting is already booked. Otherwise a person handles it (nothing is sent or booked).
+const accept = acceptIso && auto && !flagged && !priceClaim && draft.safe_to_send !== false && String(ctx.lead.stage || '') !== 'BOOKED' && !ctx.lead.next_meeting ? acceptIso : null;
+const heldAcceptance = !!acceptIso && !accept;
 let autoSend = false;
-if (auto && valid && canThread && !accept && !flagged && !priceClaim && draft.safe_to_send !== false) {
+if (auto && valid && canThread && !accept && !heldAcceptance && !flagged && !priceClaim && draft.safe_to_send !== false) {
   if (ctx.intent === 'Positive_Booking_Intent' && ctx.confidence >= 0.6) autoSend = true;
   if (ctx.intent === 'Question_Needs_FollowUp' && ctx.confidence >= 0.8 && draft.safe_to_send === true) autoSend = true;
 }
-const sendPayload = valid ? Object.assign({ lead_id: Number(ctx.ids.leadId), email_body: html, reply_message_id: ctx.ids.replyMessageId, reply_email_time: new Date().toISOString() }, ctx.ids.statsId ? { email_stats_id: ctx.ids.statsId } : {}) : null;
+const sendPayload = valid ? Object.assign({ lead_id: Number(ctx.ids.leadId), email_body: html, reply_message_id: ctx.ids.replyMessageId,
+  reply_email_time: ctx.ids.replyTime ? new Date(ctx.ids.replyTime).toISOString() : new Date().toISOString() },
+  ctx.ids.statsId ? { email_stats_id: ctx.ids.statsId } : {}) : null;
 return [{ json: { ctx: { ...ctx, draft, accept, autoSend, offerText, sendPayload } } }];
 `,
   );
@@ -442,7 +486,8 @@ return [{ json: { event: { ...c.event, sentiment: c.intent, needsHuman: true, ai
 const c = $('Parse Draft + Send Policy').first().json.ctx;
 const ms = new Date(c.accept).getTime();
 const first = String(c.lead.first_name || '').trim() || String(c.event.email).split('@')[0];
-return [{ json: { bk: { source: 'chat', email: String(c.event.email).toLowerCase(), startIso: c.accept, tz: c.tz, firstName: first, name: first, label: slotLabel(ms, c.tz), ids: c.ids } } }];
+return [{ json: { bk: { source: 'chat', email: String(c.event.email).toLowerCase(), startIso: c.accept, tz: c.tz, firstName: first, name: first, label: slotLabel(ms, c.tz), ids: c.ids,
+  nextMeeting: c.lead.next_meeting || null } } }];
 `,
   );
 
@@ -490,7 +535,7 @@ return [{ json: { page: pageHtml(msg, 'You can choose another time here.', pageB
 const v = $input.first().json;
 const href = '?e=' + encodeURIComponent(v.email) + '&s=' + encodeURIComponent(v.startIso) + '&k=' + encodeURIComponent(v.k) + '&c=1';
 const script = '<script>(function(){var d=new Date(' + JSON.stringify(v.startIso) + ');var el=document.getElementById("t");if(el&&!isNaN(d)){el.textContent=d.toLocaleString(undefined,{weekday:"long",day:"numeric",month:"long",hour:"2-digit",minute:"2-digit",timeZoneName:"short"});}})();</script>';
-const msg = 'Your 30-minute Google Meet with BrandFly:<br><strong id="t">' + escHtml(v.startIso) + '</strong>';
+const msg = 'Your free 30-minute consultation on Google Meet:<br><strong id="t">' + escHtml(v.startIso) + '</strong>';
 return [{ json: { page: pageHtml('Confirm your time', msg, pageButton(href, 'Confirm this time'), script) } }];
 `,
   );
@@ -507,6 +552,7 @@ const tz = TZ[row.region] || 'UTC';
 const first = String(row.first_name || '').trim() || v.email.split('@')[0];
 const ms = new Date(v.startIso).getTime();
 return [{ json: { bk: { source: 'link', email: v.email, startIso: v.startIso, tz, firstName: first, name: first, label: slotLabel(ms, tz), known: !!row.id,
+  nextMeeting: row.next_meeting || null,
   ids: { campaignId: row.campaign_id || null, leadId: row.outreach_lead_id || null, replyMessageId: row.reply_to_id || null, statsId: null } } } }];
 `,
   );
@@ -544,8 +590,10 @@ const walk = o => {
 for (const it of $input.all()) walk(it.json);
 const clash = busy.some(b => t0 < b[1] && t1 > b[0]);
 const stale = t0 < Date.now() + 5 * 60000;
-const free = !clash && !stale;
-return [{ json: { bk, free, reason: stale ? 'the time has already passed' : clash ? 'that time is busy on the calendar' : '' } }];
+// One meeting per prospect: a second click on another time button (or a forwarded email) must not book again.
+const already = !!bk.nextMeeting;
+const free = !clash && !stale && !already;
+return [{ json: { bk, free, already, reason: already ? 'a meeting is already booked for this person' : stale ? 'the time has already passed' : clash ? 'that time is busy on the calendar' : '' } }];
 `,
   );
   ifNode(w, "Slot Still Free?", [21, -2.6], "={{ $json.free === true }}");
@@ -610,14 +658,38 @@ return $input.all();
     String.raw`
 const b = $('Evaluate Booking').first().json;
 const bk = b.bk;
-const sender = $env.SENDER_NAME || 'Aarav Mehta';
-const text = 'Hi ' + bk.firstName + ',\n\nYour slot is booked for ' + bk.label + '. A Google Calendar invite with the Google Meet link is on its way to ' + bk.email + '.\n\nIf anything changes, just reply here and we will sort it out.\n\n' + sender + ', BrandFly';
+// The thread tells us which message to answer and its email_stats_id (a time-button click has neither).
+const res = $input.first().json || {};
+const hist = Array.isArray(res.history) ? res.history : [];
+const lastReply = [...hist].reverse().find(h => h.type === 'REPLY');
+const base = bk.ids || {};
+const ids = Object.assign({}, base, lastReply ? { replyMessageId: lastReply.message_id || base.replyMessageId, statsId: lastReply.stats_id || base.statsId, replyTime: lastReply.time || base.replyTime } : {});
+const sender = $env.SENDER_NAME || 'Jay T';
+const brand = String(ids.campaignId || '') === '4238487' ? 'Expert in SEO' : 'TapadiaTech';
+const text = 'Hi ' + bk.firstName + ',\n\nYour slot is booked for ' + bk.label + '. A Google Calendar invite with the Google Meet link is on its way to ' + bk.email + '.\n\nIf anything changes, just reply here and we will sort it out.\n\nWarm regards,\n' + sender + '\n' + brand;
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const html = esc(text).split(/\n{2,}/).map(p => '<p style="margin:0 0 14px 0">' + p.replace(/\n/g, '<br>') + '</p>').join('');
-const ids = bk.ids || {};
-const canSend = !!(ids.campaignId && ids.leadId && ids.replyMessageId);
-const sendPayload = Object.assign({ lead_id: Number(ids.leadId), email_body: html, reply_message_id: ids.replyMessageId, reply_email_time: new Date().toISOString() }, ids.statsId ? { email_stats_id: ids.statsId } : {});
+const canSend = !!(ids.campaignId && ids.leadId && ids.replyMessageId && ids.statsId);
+const sendPayload = Object.assign({ lead_id: Number(ids.leadId), email_body: html, reply_message_id: ids.replyMessageId,
+  reply_email_time: ids.replyTime ? new Date(ids.replyTime).toISOString() : new Date().toISOString() }, ids.statsId ? { email_stats_id: ids.statsId } : {});
 return [{ json: { canSend, ids, sendPayload, record: { email: bk.email, subject: 'Meeting confirmed', body: text } } }];
+`,
+  );
+  http(w, "Smartlead: Get Thread (Confirm)", [24.5, -2.2], {
+    method: "GET",
+    url: smartleadUrl("/campaigns/{{ $json.bk.ids.campaignId }}/leads/{{ $json.bk.ids.leadId }}/message-history"),
+    timeout: 20000,
+  });
+  // The prospect's reply that led to a chat booking is stored too (the normal path stores it at the end; this path ends here).
+  code(
+    w,
+    "Prepare Event: Reply That Booked",
+    [25, -1.6],
+    String.raw`
+const b = $input.first().json;
+if (b.bk.source !== 'chat') return [];
+const c = $('Parse Draft + Send Policy').first().json.ctx;
+return [{ json: { event: { ...c.event, sentiment: c.intent, needsHuman: false, aiReply: null, aiReplySent: false } } }];
 `,
   );
   ifNode(w, "Can Send Confirmation?", [26, -2.2], "={{ $json.canSend === true }}");
@@ -633,12 +705,12 @@ return [{ json: { canSend, ids, sendPayload, record: { email: bk.email, subject:
     `WITH r AS (SELECT $1::jsonb AS d),
 lead AS (SELECT l.id FROM leads l, r WHERE l.email = lower(r.d->>'email')),
 ins AS (
-  INSERT INTO email_events (lead_id, type, subject, body, ai_reply, ai_reply_sent, sentiment, occurred_at)
-  SELECT lead.id, 'AI_REPLY_SENT', r.d->>'subject', r.d->>'body', r.d->>'body', true, 'Slot_Booked', now() FROM lead, r
+  INSERT INTO email_events (lead_id, type, subject, body, ai_reply, ai_reply_sent, needs_human, sentiment, occurred_at)
+  SELECT lead.id, 'AI_REPLY_SENT', r.d->>'subject', r.d->>'body', r.d->>'body', (r.d->>'sent')::boolean, NOT (r.d->>'sent')::boolean, 'Slot_Booked', now() FROM lead, r
   RETURNING id
 )
 SELECT (SELECT count(*) FROM ins) AS inserted, (SELECT r.d->>'email' FROM r) AS email;`,
-    "={{ [JSON.stringify($('Build Booking Confirmation').first().json.record)] }}",
+    "={{ [JSON.stringify(Object.assign({}, $('Build Booking Confirmation').first().json.record, { sent: !$json.error }))] }}",
     { alwaysOutput: true },
   );
   dashboardNotify(
@@ -656,6 +728,9 @@ SELECT (SELECT count(*) FROM ins) AS inserted, (SELECT r.d->>'email' FROM r) AS 
     [25, -2],
     FMT_JS + PAGE_JS + String.raw`
 const link = $env.BOOKING_LINK;
+if ($input.first().json.already) {
+  return [{ json: { page: pageHtml('You already have a meeting with us', 'Your earlier booking still stands, and the invite is in your calendar. To move it, use the link in that invite.', pageButton(link, 'See booking options')) } }];
+}
 return [{ json: { page: pageHtml('That time is no longer available', 'Someone just took it, or it has passed. Please pick another time and it will be confirmed straight away.', pageButton(link, 'Choose another time')) } }];
 `,
   );
@@ -691,7 +766,10 @@ return [{ json: $input.first().json }];
   w.connect("Normalize Event", "Is Reply?");
   w.connect("Is Reply?", "DB: Get Lead Context", 0);
   w.connect("Is Reply?", "DB: Record Event + Update Lead", 1); // non-reply events: straight to DB (event is already shaped)
-  w.chain("DB: Get Lead Context", "Build Classify Request", "AI: Classify Reply (Sentiment)", "Parse Classification", "Route by Intent");
+  w.connect("DB: Get Lead Context", "Known Lead?");
+  w.connect("Known Lead?", "Build Classify Request", 0);
+  w.connect("Known Lead?", "Dashboard: Reply From Unknown Sender", 1);
+  w.chain("Build Classify Request", "AI: Classify Reply (Sentiment)", "Parse Classification", "Route by Intent");
   w.connect("Route by Intent", "Smartlead: Note Interested", 0);
   w.connect("Route by Intent", "Smartlead: Get Thread", 0);
   w.connect("Route by Intent", "Smartlead: Get Thread", 1);
@@ -707,6 +785,7 @@ return [{ json: $input.first().json }];
     "Cal.com: Get Open Slots",
     "Google: Calendar Id (Offer)",
     "Google Calendar: Busy Times (Offer)",
+    "DB: Reply Prompt Settings",
     "Build Reply Request",
     "AI: Draft Booking Reply",
     "Parse Draft + Send Policy",
@@ -736,7 +815,10 @@ return [{ json: $input.first().json }];
   w.connect("Booked?", "Link Booking? (ok)", 0);
   w.connect("Booked?", "Let Calendar Settle", 0);
   w.connect("Let Calendar Settle", "Sync Booking To Meeting Lane");
-  w.connect("Booked?", "Build Booking Confirmation", 0);
+  w.connect("Booked?", "Smartlead: Get Thread (Confirm)", 0);
+  w.connect("Smartlead: Get Thread (Confirm)", "Build Booking Confirmation");
+  w.connect("Booked?", "Prepare Event: Reply That Booked", 0);
+  w.connect("Prepare Event: Reply That Booked", "DB: Record Event + Update Lead");
   w.connect("Booked?", "Link Booking? (failed)", 1);
   w.connect("Link Booking? (ok)", "Page: Booked", 0);
   w.connect("Build Booking Confirmation", "Can Send Confirmation?");
@@ -816,7 +898,7 @@ return id && campaignId ? [{ json: { id, campaignId } }] : [];
     String.raw`
 const lead = $input.first().json;
 return [{ json: { ctx: { lead, intent: 'Positive_Booking_Intent', confidence: 1, summary: 'Moved to booking stage manually from the dashboard',
-  replyText: '(The BrandFly team moved this lead to the booking stage. Write a short, warm email inviting them to pick one of the times below.)',
+  replyText: '(Our team moved this lead to the booking stage. Write a short, warm email inviting them to pick one of the times below.)',
   event: { email: lead.email, type: 'REPLY_RECEIVED', step: Math.max(1, (lead.sent_emails || []).length), externalId: lead.reply_to_id, eaccount: lead.eaccount, subject: lead.last_subject, body: '(Manually pushed to booking stage from the dashboard)' } } } }];
 `,
   );
@@ -830,7 +912,8 @@ return [{ json: { ctx: { lead, intent: 'Positive_Booking_Intent', confidence: 1,
   w.connect("Route Control Action", "DB: Get Lead Context (Control)", 2);
   w.chain("Smartlead: Lookup Lead To Pause", "Pick Lead Id (pause)", "Smartlead: Pause Lead");
   w.chain("Smartlead: Lookup Lead To Resume", "Pick Lead Id (resume)", "Smartlead: Resume Lead");
-  w.chain("DB: Get Lead Context (Control)", "Synthesize Booking Intent", "Build Slots Request");
+  // Through the thread fetch, so ctx.ids exists (Build Reply Request reads it) and the push can reply in the real thread.
+  w.chain("DB: Get Lead Context (Control)", "Synthesize Booking Intent", "Smartlead: Get Thread");
 
   return w;
 }

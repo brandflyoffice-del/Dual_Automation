@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Rocket } from "lucide-react";
+import { Loader2, Plus, Rocket } from "lucide-react";
 import { toast } from "sonner";
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,8 @@ import { Input, Label } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EMPLOYEE_RANGES, EUROPE_COUNTRIES, ICP, INDUSTRY_LABEL, LEAD_PROVIDERS, OUTREACH_CAMPAIGNS, pickCampaign, REGION_META, SERVICES, SERVICE_META, type LeadProvider } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { CostEstimate, costLabel } from "@/components/cost-estimate";
+import type { ServiceLine } from "@/lib/settings-shared";
 
 const DEFAULT_REGIONS = [...ICP.regions];
 const DEFAULT_INDUSTRIES = [...ICP.industries];
@@ -77,7 +79,10 @@ export function LaunchCampaign({ className, compact = false }: { className?: str
   const [places, setPlaces] = useState("");
   const [industryQuery, setIndustryQuery] = useState("");
   const [offering, setOffering] = useState("");
-  const [offerings, setOfferings] = useState<{ name: string }[]>([]);
+  const [lines, setLines] = useState<ServiceLine[]>([]);
+  const [lineId, setLineId] = useState("AUTO");
+  const [sub, setSub] = useState("ANY");
+  const [newSub, setNewSub] = useState<string | null>(null);
   const [regions, setRegions] = useState<string[]>(DEFAULT_REGIONS);
   const [europe, setEurope] = useState<string[]>([...DEFAULT_EUROPE]);
   const [industries, setIndustries] = useState<string[]>(DEFAULT_INDUSTRIES);
@@ -108,14 +113,43 @@ export function LaunchCampaign({ className, compact = false }: { className?: str
   useEffect(() => {
     fetch("/api/offerings")
       .then((r) => r.json())
-      .then((rows: { name: string }[]) => setOfferings(rows))
+      .then((rows: ServiceLine[]) => setLines(Array.isArray(rows) ? rows : []))
       .catch(() => {});
   }, []);
 
+  const line = lines.find((l) => l.id === lineId) ?? null;
+  // What is sent as "offering": the chosen sub-service, else the service line, else what the checker read from the sentence.
+  const offeringText = sub !== "ANY" ? sub : line ? line.name : offering;
+
   useEffect(() => {
     if (campaignLock) return;
-    setCampaignId(pickCampaign({ offering, service, sentence, industry: industryQuery }));
-  }, [offering, service, sentence, industryQuery, campaignLock]);
+    setCampaignId(line ? line.campaignId : pickCampaign({ offering, service, sentence, industry: industryQuery }));
+  }, [line, offering, service, sentence, industryQuery, campaignLock]);
+
+  function chooseLine(id: string) {
+    setLineId(id);
+    setSub("ANY");
+    setNewSub(null);
+  }
+
+  async function addSubService() {
+    const name = (newSub ?? "").trim();
+    if (!line || name.length < 2) return;
+    const existing = line.items.find((i) => i.name.toLowerCase() === name.toLowerCase());
+    if (existing) {
+      setSub(existing.name);
+      setNewSub(null);
+      return;
+    }
+    const next = lines.map((l) => (l.id === line.id ? { ...l, items: [...l.items, { name, signals: "" }] } : l));
+    const res = await fetch("/api/offerings", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(next) });
+    const json = await res.json();
+    if (!res.ok) return toast.error(json.error || "Could not add");
+    setLines(json);
+    setSub(name);
+    setNewSub(null);
+    toast.success(`Added "${name}" under ${line.name}`);
+  }
 
   function chooseProvider(id: LeadProvider) {
     setProvider(id);
@@ -127,7 +161,7 @@ export function LaunchCampaign({ className, compact = false }: { className?: str
       name,
       places,
       industryQuery,
-      offering,
+      offering: offeringText,
       keyword,
       extraTitles,
       excludeNote,
@@ -148,7 +182,16 @@ export function LaunchCampaign({ className, compact = false }: { className?: str
     if (json.name) setName(json.name);
     if (json.places?.length) setPlaces(json.places.join(", "));
     if (json.industryQuery) setIndustryQuery(json.industryQuery);
-    if (json.offering) setOffering(json.offering);
+    if (json.offering) {
+      const said = json.offering;
+      setOffering(said);
+      // If the checker named a known sub-service, select it in the two dropdowns.
+      const hit = lines.flatMap((l) => l.items.map((i) => ({ l, i }))).find(({ i }) => i.name.toLowerCase() === said.toLowerCase());
+      if (hit && lineId === "AUTO") {
+        setLineId(hit.l.id);
+        setSub(hit.i.name);
+      }
+    }
     if (json.keyword) setKeyword(json.keyword);
     if (json.howMany) setLimit(json.howMany);
     if (json.industries?.length) setIndustries(json.industries);
@@ -204,6 +247,9 @@ export function LaunchCampaign({ className, compact = false }: { className?: str
     setPlaces("");
     setIndustryQuery("");
     setOffering("");
+    setLineId("AUTO");
+    setSub("ANY");
+    setNewSub(null);
     setRegions(DEFAULT_REGIONS);
     setEurope([...DEFAULT_EUROPE]);
     setIndustries(DEFAULT_INDUSTRIES);
@@ -237,7 +283,7 @@ export function LaunchCampaign({ className, compact = false }: { className?: str
           name: (checked?.name || name).trim(),
           places: placeList,
           industryQuery: (checked?.industryQuery || industryQuery).trim(),
-          offering: (checked?.offering || offering).trim(),
+          offering: (sub !== "ANY" || line ? offeringText : checked?.offering || offering).trim(),
           regions: checked?.regions?.length ? checked.regions : regions,
           europeCountries: europeOn ? (checked?.europeCountries?.length ? checked.europeCountries : europe) : undefined,
           industries: checked?.industries?.length ? checked.industries : industries,
@@ -320,21 +366,80 @@ export function LaunchCampaign({ className, compact = false }: { className?: str
           <Field label="Places" hint="City, state, or country. Used instead of the region chips when filled">
             <Input value={places} placeholder="Hyderabad, Dubai, Germany" onChange={(e) => setPlaces(e.target.value)} />
           </Field>
+          <Field label="Industry in their words" hint="Optional, e.g. jewellery">
+            <Input value={industryQuery} placeholder="jewellery" onChange={(e) => setIndustryQuery(e.target.value)} />
+          </Field>
+
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Industry in their words" hint="Optional, e.g. jewellery">
-              <Input value={industryQuery} placeholder="jewellery" onChange={(e) => setIndustryQuery(e.target.value)} />
+            <Field label="What do you want to sell?" hint="Edit the list on the Services page">
+              <Select value={lineId} onValueChange={chooseLine}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="AUTO">Decide from my description</SelectItem>
+                  {lines.map((l) => (
+                    <SelectItem key={l.id} value={l.id}>
+                      {l.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </Field>
-            <Field label="Service you want to sell" hint="From your services list">
-              <Input value={offering} list="offerings" placeholder="SEO, ERP, RFID…" onChange={(e) => setOffering(e.target.value)} />
-              <datalist id="offerings">
-                {offerings.map((o) => (
-                  <option key={o.name} value={o.name} />
-                ))}
-              </datalist>
+            <Field label="Specific service" hint={line ? `${line.items.length} in this line` : "Pick what you sell first"}>
+              {newSub === null ? (
+                <div className="flex gap-2">
+                  <Select value={sub} onValueChange={setSub} disabled={!line}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ANY">{line ? `Any ${line.name}` : "Any"}</SelectItem>
+                      {(line?.items ?? []).map((i) => (
+                        <SelectItem key={i.name} value={i.name}>
+                          {i.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button type="button" variant="secondary" aria-label="Add a specific service" disabled={!line} onClick={() => setNewSub("")}>
+                    <Plus />
+                    Add
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Input
+                    autoFocus
+                    value={newSub}
+                    maxLength={80}
+                    placeholder={`New service under ${line?.name ?? ""}`}
+                    onChange={(e) => setNewSub(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        addSubService();
+                      }
+                      if (e.key === "Escape") setNewSub(null);
+                    }}
+                  />
+                  <Button type="button" onClick={addSubService} disabled={newSub.trim().length < 2}>
+                    Save
+                  </Button>
+                  <Button type="button" variant="ghost" onClick={() => setNewSub(null)}>
+                    Cancel
+                  </Button>
+                </div>
+              )}
             </Field>
           </div>
+          {lineId === "AUTO" && offering && (
+            <p className="-mt-3 text-[12px] text-muted-foreground">
+              Read from your description: <span className="font-medium text-foreground">{offering}</span>
+            </p>
+          )}
 
-          <Field label="Email campaign" hint="Picked from the product. People found here are added to this campaign.">
+          <Field label="Email campaign" hint="Follows what you sell. People found here are added to this campaign.">
             <Select
               value={campaignId}
               onValueChange={(value) => {
@@ -452,10 +557,14 @@ export function LaunchCampaign({ className, compact = false }: { className?: str
             <span className="font-medium text-foreground">{summary}</span>
             <span className="mt-1 block">A known revenue outside $100k–$10M is dropped. A real work email is still required.</span>
           </div>
+          <CostEstimate provider={provider} leads={limit} />
           {!ready && <p className="text-xs text-rose-600">Keep at least one region, industry, role, and company size. If Europe is on, keep one country.</p>}
         </div>
 
-        <div className="sticky bottom-0 flex flex-col-reverse gap-2 border-t border-border bg-card px-5 py-3 sm:flex-row sm:justify-end sm:px-6">
+        <div className="sticky bottom-0 flex flex-col-reverse gap-2 border-t border-border bg-card px-5 py-3 sm:flex-row sm:items-center sm:justify-end sm:px-6">
+          <span className="text-center text-[12px] text-muted-foreground sm:mr-auto sm:text-left">
+            Est. cost <span className="font-metric font-semibold text-foreground">{costLabel(provider, limit)}</span>
+          </span>
           <Button type="button" variant="secondary" onClick={reset} disabled={busy}>
             Reset to defaults
           </Button>
