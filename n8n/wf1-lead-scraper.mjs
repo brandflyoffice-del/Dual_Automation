@@ -524,7 +524,8 @@ return $input.all().map(it => {
     '<audit>' + JSON.stringify({ verified_hooks: l.auditFindings.verifiedHooks, site_reachable: l.auditFindings.reachable,
       mobile_pagespeed: l.auditFindings.pageSpeedMobile, lcp_seconds: l.auditFindings.lcpSeconds, tech_stack: l.auditFindings.techStack }) + '</audit>\n' +
     '<case_studies>' + (($env.CASE_STUDIES) || '') + '</case_studies>\n' +
-    '<booking_link>' + booking + '</booking_link>\n<sender_name>' + sender + ', BrandFly</sender_name>\n' +
+    '<booking_link>' + booking + '</booking_link>\n<sender_name>' + sender + '</sender_name>\n' +
+    '<brand>' + (String(ctx.campaignId) === '4238487' ? 'Expert in SEO' : 'TapadiaTech') + '</brand>\n' +
     '<offering>' + (ctx.offering || ctx.service || 'none') + '</offering>\n' +
     '<preferred_service_tiebreaker>' + (ctx.service || 'none') + '</preferred_service_tiebreaker>\n' +
     '<ticket_gate>' + ($env.TICKET_GATE === 'off' ? 'off' : 'on') + '</ticket_gate>\n' +
@@ -552,7 +553,11 @@ const ctx = $('Build ICP Query').first().json.ctx;
 const booking = $env.BOOKING_LINK;
 const SERVICES = ['WEB_ECOM', 'DIGITAL_MARKETING', 'STAFF_AUG', 'MANAGED_IT'];
 const DAYS = [0, 3, 7, 11];
-const toHtml = s => String(s).replace(/\r?\n/g, '<br>');
+// Smartlead custom fields email_1..4 hold ready HTML paragraphs that drop into the campaign's branded template.
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const toHtml = s => String(s).trim().split(/\r?\n\s*\r?\n/).map(p => '<p style="margin:0 0 16px;">' + esc(p.trim()).replace(/\r?\n/g, '<br>') + '</p>').join('');
+// The template carries the signature, so a sign-off the model adds anyway is cut.
+const stripSignoff = s => String(s).replace(/\n+\s*(best|kind|warm)?\s*regards,?[\s\S]*$/i, '').replace(/\n+\s*(cheers|thanks|best),?\s*\n+\s*jay[\s\S]*$/i, '').trim();
 const out = [];
 $input.all().forEach((it, i) => {
   const lead = src[i].json;
@@ -568,7 +573,7 @@ $input.all().forEach((it, i) => {
   let reason = qualified ? null : (ai.disqualify_reason || (gateOn && ticket < 1000 ? 'Estimated ticket below $1,000' : !emailsOk ? 'Invalid email sequence from LLM' : 'Did not fit ICP'));
   if (!qualified) { out.push({ json: { qualified: false, email: lead.email, company: lead.companyName, reason } }); return; }
 
-  const bodies = emails.map(e => e.body.includes(booking) ? e.body : e.body + '\n\nBook a time here: ' + booking); // guarantee CTA
+  const bodies = emails.map(e => stripSignoff(e.body.split(booking).join('the button below'))); // CTA is the template's booking button
   const now = Date.now();
   const sequences = emails.map((e, k) => ({ step: k + 1, subject: e.subject, body: bodies[k], scheduled_at: new Date(now + DAYS[k] * 86400000).toISOString() }));
   const cv = { pain_point: ai.pain_point_tag, pain_point_detail: ai.pain_point_detail, recommended_service: serviceName,

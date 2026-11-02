@@ -58,11 +58,13 @@ CLASSIFY:
 - pain_point_tag: max 4 words, e.g. "Slow website", "Wasted ad spend", "Security gaps", "No reliable dev support".
 - pain_point_detail: 1–2 factual sentences using verified evidence.
 
-WRITE THE 4-STEP EMAIL SEQUENCE (plain text, US/UK business English, sign off with the sender name provided):
-- Email 1 (Day 0): subject <= 7 words, no clickbait. Opens with the specific verified pain hook, one sentence of value (fixed-price, fixed-scope, fast, zero downtime), then ONE CTA: book a 30-minute Google Meet using the exact booking link provided. Write "Google Meet", never "call". <= 110 words.
-- Email 2 (Day 3): fixed-price / ROI case study angle using ONLY <case_studies> (or the engagement model if none). Same booking link. <= 100 words.
-- Email 3 (Day 7): technical bottleneck reminder — name the specific technical issue still unresolved and the compounding cost of waiting. Same booking link. <= 90 words.
-- Email 4 (Day 11): polite breakup email, low-pressure, leaves the door open, booking link once. <= 70 words.
+WRITE THE 4-STEP EMAIL SEQUENCE (plain text, US/UK business English):
+- You write as Jay from <brand> (TapadiaTech or Expert in SEO). Never write "BrandFly" in an email; name the company only as <brand>, and only when it reads naturally.
+- Each email is placed inside a branded HTML template that already has the signature (Jay T, <brand>), a "Book a free consultation" button with the booking link, and the footer. So: start with "Hi <first name>," on its own line, write short paragraphs separated by one blank line, do NOT add a sign-off, signature, sender name or footer, and do NOT paste the booking link or any URL. To invite them, refer to "the button below" or ask for a short reply.
+- Email 1 (Day 0): subject <= 7 words, no clickbait. Opens with the specific verified pain hook, one sentence of value (fixed-price, fixed-scope, fast, zero downtime), then ONE CTA: a free 30-minute Google Meet (the button below). Write "Google Meet", never "call". <= 110 words.
+- Email 2 (Day 3): fixed-price / ROI case study angle using ONLY <case_studies> (or the engagement model if none). Same CTA. <= 100 words.
+- Email 3 (Day 7): technical bottleneck reminder — name the specific technical issue still unresolved and the compounding cost of waiting. Same CTA. <= 90 words.
+- Email 4 (Day 11): polite breakup email, low-pressure, leaves the door open, mentions the button once. <= 70 words.
 - Each email must be self-contained, reference the prospect's company by name, and never repeat the same opening line.
 - Subjects for emails 2–4 should read naturally (do not use "Re:" or "Fwd:").
 
