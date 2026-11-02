@@ -436,7 +436,7 @@ const html = valid ? paras + slotsHtml + tail + signHtml : '';
 const offerText = valid ? text + slotsText + '\n\n' + ctx.signOff : '';
 
 const auto = String($env.AI_AUTO_REPLY || 'false').toLowerCase() === 'true';
-// Smartlead's reply-email-thread needs the lead id, the message we answer and its email_stats_id.
+// Smartlead's reply-email-thread needs the message we answer and its email_stats_id (lead_id in the body is rejected with HTTP 400; the lead id is only used to fetch the thread).
 const canThread = !!(ctx.ids.leadId && ctx.ids.replyMessageId && ctx.ids.campaignId && ctx.ids.statsId);
 // Booking on a written acceptance follows the same policy as an automatic reply: auto-reply on, nothing flagged, no other price,
 // the model did not ask for review, and no meeting is already booked. Otherwise a person handles it (nothing is sent or booked).
@@ -447,7 +447,7 @@ if (auto && valid && canThread && !accept && !heldAcceptance && !flagged && !pri
   if (ctx.intent === 'Positive_Booking_Intent' && ctx.confidence >= 0.6) autoSend = true;
   if (ctx.intent === 'Question_Needs_FollowUp' && ctx.confidence >= 0.8 && draft.safe_to_send === true) autoSend = true;
 }
-const sendPayload = valid ? Object.assign({ lead_id: Number(ctx.ids.leadId), email_body: html, reply_message_id: ctx.ids.replyMessageId,
+const sendPayload = valid ? Object.assign({ email_body: html, reply_message_id: ctx.ids.replyMessageId,
   reply_email_time: ctx.ids.replyTime ? new Date(ctx.ids.replyTime).toISOString() : new Date().toISOString() },
   ctx.ids.statsId ? { email_stats_id: ctx.ids.statsId } : {}) : null;
 return [{ json: { ctx: { ...ctx, draft, accept, autoSend, offerText, sendPayload } } }];
@@ -676,7 +676,7 @@ const text = 'Hi ' + bk.firstName + ',\n\nYour slot is booked for ' + bk.label +
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const html = esc(text).split(/\n{2,}/).map(p => '<p style="margin:0 0 14px 0">' + p.replace(/\n/g, '<br>') + '</p>').join('');
 const canSend = !!(ids.campaignId && ids.leadId && ids.replyMessageId && ids.statsId);
-const sendPayload = Object.assign({ lead_id: Number(ids.leadId), email_body: html, reply_message_id: ids.replyMessageId,
+const sendPayload = Object.assign({ email_body: html, reply_message_id: ids.replyMessageId,
   reply_email_time: ids.replyTime ? new Date(ids.replyTime).toISOString() : new Date().toISOString() }, ids.statsId ? { email_stats_id: ids.statsId } : {});
 return [{ json: { canSend, ids, sendPayload, record: { email: bk.email, subject: 'Meeting confirmed', body: text } } }];
 `,
