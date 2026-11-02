@@ -16,16 +16,16 @@
   --secondary: #eef0f4;
   --secondary-foreground: #1e293b;
   --muted: #f1f3f6;
-  --muted-foreground: #5b6477;
+  --muted-foreground: #4f596b;
   --accent: #eceffd;
   --accent-foreground: #1e1b4b;
   --destructive: #e11d48;
-  --border: rgba(15, 23, 42, 0.1);
-  --input: rgba(15, 23, 42, 0.14);
+  --border: rgba(15, 23, 42, 0.12);
+  --input: rgba(15, 23, 42, 0.2);
   --ring: #4f46e5;
   --indigo: #4f46e5;
   --emerald: #059669;
-  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.04);
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.06), 0 2px 6px -1px rgba(15, 23, 42, 0.06);
   --shadow-pop: 0 10px 30px -10px rgba(15, 23, 42, 0.2), 0 2px 6px rgba(15, 23, 42, 0.06);
 }
 

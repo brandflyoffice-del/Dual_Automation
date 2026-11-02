@@ -1,6 +1,10 @@
 import { Workflow, webhook, respond, respondHtml, ifNode, switchNode, http, code, postgres, sticky, dashboardNotify, smartleadUrl, googleCalendarIdNode, calExpr, PG_CRED_ID, PG_CRED_NAME } from "./lib.mjs";
 import { CLASSIFY_REPLY_SYSTEM, DRAFT_REPLY_TEMPLATE, PRICE_TOKEN, STARTING_PRICE } from "./prompts.mjs";
 import { SIGN_JS, FMT_JS, PAGE_JS } from "./helpers.mjs";
+import { COUNTRIES } from "./targeting.mjs";
+
+// Prospect time zone: by country when we know it (India = Asia/Kolkata), else by region.
+const COUNTRY_TZ_JSON = JSON.stringify(Object.fromEntries(COUNTRIES.map((c) => [c.name.toLowerCase(), c.tz])));
 
 const GCRED = { googleCalendarOAuth2Api: { id: "y5FL0LJTf7OK7BZo", name: "Google Calendar account" } };
 
@@ -250,7 +254,8 @@ return [{ json: { ctx: { ...ctx, thread, ids, threadLoaded: hist.length > 0 } } 
     String.raw`
 const ctx = $input.first().json.ctx;
 const TZ = { US: 'America/New_York', UK: 'Europe/London', EUROPE: 'Europe/Berlin', UAE: 'Asia/Dubai' };
-const tz = TZ[ctx.lead.region] || 'UTC';
+const COUNTRY_TZ = ${COUNTRY_TZ_JSON};
+const tz = COUNTRY_TZ[String(ctx.lead.country || '').toLowerCase()] || TZ[ctx.lead.region] || 'UTC';
 const day = 86400000, now = Date.now();
 const iso = ms => new Date(ms).toISOString().slice(0, 10);
 return [{ json: { ctx: { ...ctx, tz }, qs: { start: iso(now), end: iso(now + 9 * day), timeZone: tz } } }];
@@ -548,7 +553,8 @@ return [{ json: { page: pageHtml('Confirm your time', msg, pageButton(href, 'Con
 const v = $('Verify Slot Link').first().json;
 const row = $input.first().json || {};
 const TZ = { US: 'America/New_York', UK: 'Europe/London', EUROPE: 'Europe/Berlin', UAE: 'Asia/Dubai' };
-const tz = TZ[row.region] || 'UTC';
+const COUNTRY_TZ = ${COUNTRY_TZ_JSON};
+const tz = COUNTRY_TZ[String(row.country || '').toLowerCase()] || TZ[row.region] || 'UTC';
 const first = String(row.first_name || '').trim() || v.email.split('@')[0];
 const ms = new Date(v.startIso).getTime();
 return [{ json: { bk: { source: 'link', email: v.email, startIso: v.startIso, tz, firstName: first, name: first, label: slotLabel(ms, tz), known: !!row.id,

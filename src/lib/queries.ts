@@ -103,6 +103,22 @@ export async function getDashboardData() {
       replyRate: safePct(pos.length, em.length),
     };
   });
+  // Leads from a named place outside the four markets (e.g. India) are stored as region OTHER.
+  const other = leads.filter((l) => !(ICP.regions as readonly string[]).includes(l.region));
+  if (other.length) {
+    const em = other.filter((l) => SENT_STAGES.includes(l.stage));
+    const pos = other.filter((l) => l.replySentiment === "Positive_Booking_Intent");
+    geo.push({
+      region: "OTHER" as Region,
+      name: "Other countries",
+      color: "#64748b",
+      leads: other.length,
+      emailed: em.length,
+      positive: pos.length,
+      meetings: liveMeetings.filter((m) => !(ICP.regions as readonly string[]).includes(m.lead.region)).length,
+      replyRate: safePct(pos.length, em.length),
+    });
+  }
 
   const services = (Object.keys(SERVICE_META) as Service[]).map((s) => {
     const ls = leads.filter((l) => l.recommendedService === s);

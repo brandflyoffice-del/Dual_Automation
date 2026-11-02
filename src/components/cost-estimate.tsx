@@ -21,7 +21,7 @@ export function costLabel(provider: LeadProvider, leads: number) {
   return `~${usd(total)}${credits ? ` + ${credits.toLocaleString()} credits` : ""}`;
 }
 
-export function CostEstimate({ provider, leads }: { provider: LeadProvider; leads: number }) {
+export function CostEstimate({ provider, leads, compact = false }: { provider: LeadProvider; leads: number; compact?: boolean }) {
   const r = COST_RATES;
   const { search, credits, ai, replies, replyCost, total } = estimateCost(provider, leads);
   const per1000 = (provider === "apify" ? r.apifyPerLead : 0) * 1000 + r.gptQualifyPerLead * 1000 + r.expectedReplyRate * 1000 * r.gptPerReply;
@@ -39,8 +39,8 @@ export function CostEstimate({ provider, leads }: { provider: LeadProvider; lead
   return (
     <div className="rounded-lg border border-border bg-card">
       <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-2">
-        <span className="flex items-center gap-2 text-[13px] font-medium">
-          <Calculator className="size-4 text-emerald" /> Estimated cost for this launch
+        <span className="flex items-center gap-2 whitespace-nowrap text-[13px] font-medium">
+          <Calculator className="size-4 shrink-0 text-emerald" /> {compact ? "Estimated cost" : "Estimated cost for this launch"}
         </span>
         <span className="font-metric text-sm font-semibold text-emerald">
           ~{usd(total)}
@@ -52,7 +52,7 @@ export function CostEstimate({ provider, leads }: { provider: LeadProvider; lead
           {rows.map(([what, how, cost]) => (
             <tr key={what} className="border-b border-border/60 last:border-0">
               <td className="px-3 py-1.5 text-foreground">{what}</td>
-              <td className="hidden px-3 py-1.5 text-muted-foreground sm:table-cell">{how}</td>
+              <td className={compact ? "hidden" : "hidden px-3 py-1.5 text-muted-foreground sm:table-cell"}>{how}</td>
               <td className="font-metric px-3 py-1.5 text-right">{cost}</td>
             </tr>
           ))}

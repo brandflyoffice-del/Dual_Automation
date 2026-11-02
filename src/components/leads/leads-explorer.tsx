@@ -65,13 +65,14 @@ export function LeadsExplorer({ leads }: { leads: LeadRow[] }) {
   const [sorting, setSorting] = useState<SortingState>([{ id: "score", desc: true }]);
 
   const painTags = useMemo(() => Array.from(new Set(leads.map((l) => l.painPoint).filter(Boolean))) as string[], [leads]);
+  const customIndustries = useMemo(() => Array.from(new Set(leads.map((l) => l.industry).filter((i) => i && !(ICP.industries as readonly string[]).includes(i)))).sort(), [leads]);
 
   const filtered = useMemo(() => {
     const [lo, hi] = REV_BANDS[revenue];
     const needle = q.trim().toLowerCase();
     return leads.filter(
       (l) =>
-        (region === "all" || l.region === region) &&
+        (region === "all" || l.region === region || (region === "OTHER" && !(ICP.regions as readonly string[]).includes(l.region))) &&
         (industry === "all" || l.industry === industry) &&
         (pain === "all" || l.painPoint === pain) &&
         (stage === "all" || l.stage === stage) &&
@@ -229,13 +230,13 @@ export function LeadsExplorer({ leads }: { leads: LeadRow[] }) {
           value={region}
           onChange={setRegion}
           placeholder="Geography"
-          options={[["all", "All geographies"], ...ICP.regions.map((r): [string, string] => [r, `${REGION_META[r].flag} ${REGION_META[r].label}`])]}
+          options={[["all", "All geographies"], ...ICP.regions.map((r): [string, string] => [r, `${REGION_META[r].flag} ${REGION_META[r].label}`]), ["OTHER", "🌐 Other countries"]]}
         />
         <FilterSelect
           value={industry}
           onChange={setIndustry}
           placeholder="Industry"
-          options={[["all", "All industries"], ...ICP.industries.map((i): [string, string] => [i, INDUSTRY_LABEL[i]])]}
+          options={[["all", "All industries"], ...ICP.industries.map((i): [string, string] => [i, INDUSTRY_LABEL[i]]), ...customIndustries.map((i): [string, string] => [i, i])]}
         />
         <FilterSelect value={revenue} onChange={setRevenue} placeholder="Revenue" options={Object.entries(REV_LABEL)} />
         <FilterSelect value={pain} onChange={setPain} placeholder="Pain point" options={[["all", "All pain points"], ...painTags.map((p): [string, string] => [p, p])]} />

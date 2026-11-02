@@ -9,9 +9,9 @@ import { cn } from "@/lib/utils";
 export const dynamic = "force-dynamic";
 
 const TABS = [
-  { id: "prompt", label: "AI reply prompt", icon: Bot },
-  { id: "brand", label: "Brand & logo", icon: Palette },
-  { id: "meetings", label: "Meeting alerts", icon: CalendarCheck2 },
+  { id: "prompt", label: "AI reply prompt", detail: "How the AI answers replies", icon: Bot },
+  { id: "brand", label: "Brand & logo", detail: "Logo and dashboard name", icon: Palette },
+  { id: "meetings", label: "Meeting alerts", detail: "Who gets invited to meetings", icon: CalendarCheck2 },
 ] as const;
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
@@ -19,22 +19,36 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const tab = TABS.find((t) => t.id === raw)?.id ?? "prompt";
   return (
     <>
-      <PageHeader title="Settings" description="Change how the AI answers, the logo, and who hears about booked meetings. Saved changes apply straight away." />
-      <div className="mb-4 flex gap-1 overflow-x-auto rounded-lg border border-border bg-card p-1">
-        {TABS.map(({ id, label, icon: Icon }) => (
-          <Link
-            key={id}
-            href={`/settings?tab=${id}`}
-            className={cn(
-              "flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors",
-              tab === id ? "bg-emerald/10 font-medium text-emerald" : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground",
-            )}
-          >
-            <Icon className="size-4" />
-            {label}
-          </Link>
-        ))}
-      </div>
+      <PageHeader title="Settings" description="Change how the AI answers, the logo, and who hears about booked meetings. Saved changes apply straight away, no deploy needed." />
+      <nav aria-label="Settings sections" className="mb-6 grid grid-cols-3 gap-1 rounded-xl border border-border bg-card p-1 shadow-card sm:gap-1.5 sm:p-1.5">
+        {TABS.map(({ id, label, detail, icon: Icon }) => {
+          const on = tab === id;
+          return (
+            <Link
+              key={id}
+              href={`/settings?tab=${id}`}
+              aria-current={on ? "page" : undefined}
+              className={cn(
+                "group flex min-w-0 items-center gap-2.5 rounded-lg px-2 py-2 transition-colors sm:px-3 sm:py-2.5",
+                on ? "bg-emerald/[0.08] ring-1 ring-emerald/25" : "hover:bg-foreground/[0.04]",
+              )}
+            >
+              <span
+                className={cn(
+                  "hidden size-8 shrink-0 items-center justify-center rounded-md border sm:flex",
+                  on ? "border-emerald/30 bg-card text-emerald" : "border-border bg-muted text-muted-foreground group-hover:text-foreground",
+                )}
+              >
+                <Icon className="size-4" />
+              </span>
+              <span className="min-w-0">
+                <span className={cn("block truncate text-[13px] font-medium", on ? "text-emerald" : "text-foreground")}>{label}</span>
+                <span className="hidden truncate text-[11px] text-muted-foreground md:block">{detail}</span>
+              </span>
+            </Link>
+          );
+        })}
+      </nav>
       {tab === "prompt" && <PromptEditor />}
       {tab === "brand" && <BrandSettings />}
       {tab === "meetings" && <MeetingAlerts />}

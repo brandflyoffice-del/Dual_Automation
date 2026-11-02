@@ -139,7 +139,7 @@ function DrawerBody({
         </div>
         <SheetTitle className="text-xl font-semibold tracking-tight">{m.company}</SheetTitle>
         <SheetDescription className="mt-1 text-sm text-muted-foreground">
-          {m.prospectName} · {m.role} · {formatRevenueBand(m.revenue)} revenue · {INDUSTRY_LABEL[m.industry as Industry]} ·{" "}
+          {m.prospectName} · {m.role} · {formatRevenueBand(m.revenue)} revenue · {INDUSTRY_LABEL[m.industry as Industry] ?? m.industry} ·{" "}
           {m.country}
         </SheetDescription>
         <div className="font-metric mt-3 space-y-0.5 text-xs text-muted-foreground">

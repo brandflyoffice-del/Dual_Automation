@@ -15,7 +15,7 @@ import {
 
 export function RegionBadge({ region }: { region: string }) {
   const m = REGION_META[region as Region];
-  if (!m) return <Badge>{region}</Badge>;
+  if (!m) return <Badge variant="outline">{region === "OTHER" ? "Intl" : region}</Badge>;
   return (
     <Badge variant="outline" className="gap-1.5">
       <span className="font-metric text-[10px] tracking-wide">{region === "EUROPE" ? "EU" : region}</span>

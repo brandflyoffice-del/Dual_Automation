@@ -1,5 +1,13 @@
 import { Workflow, webhook, respond, ifNode, http, code, postgres, noop, sticky, dashboardNotify, smartleadUrl } from "./lib.mjs";
 import { QUALIFY_AND_SEQUENCE_SYSTEM } from "./prompts.mjs";
+import { COUNTRIES, EMPLOYEE_BUCKETS, EUROPE_CORE, ROLE_CATALOG } from "./targeting.mjs";
+
+// Shared lists baked into the Code nodes (same lists the dashboard Launch form uses).
+const TARGETING_JS =
+  "const ROLE_CATALOG = " + JSON.stringify(ROLE_CATALOG.map(({ id, titles, rx, not }) => ({ id, titles, rx, not: not || null }))) + ";\n" +
+  "const COUNTRIES = " + JSON.stringify(COUNTRIES.map(({ code, name, region }) => [code, name, region])) + ";\n" +
+  "const ALL_EMP = " + JSON.stringify(EMPLOYEE_BUCKETS.map((b) => b.id)) + ";\n" +
+  "const EUROPE_CORE = " + JSON.stringify(EUROPE_CORE) + ";\n";
 
 export function buildWorkflow1() {
   const w = new Workflow("Fenebris_01_Lead_Scraper_And_AI_Enrichment");
@@ -25,7 +33,7 @@ export function buildWorkflow1() {
     w,
     "Build ICP Query",
     [3, 0],
-    String.raw`
+    TARGETING_JS + String.raw`
 // Strict ICP: US / UK / Europe / UAE · Founder, Co-Founder, CEO, CTO, Operations Director · $100k–$10M revenue.
 const input = $input.first().json;
 const body = input.body || {};
@@ -44,12 +52,12 @@ const INDUSTRY_KEYWORDS = {
 };
 const REGIONS = Object.keys(REGION_COUNTRIES);
 const INDUSTRIES = Object.keys(INDUSTRY_KEYWORDS);
-const ROLE_TITLES = {
-  Founder: ['Founder'], 'Co-Founder': ['Co-Founder'], CEO: ['CEO', 'Chief Executive Officer'],
-  CTO: ['CTO', 'Chief Technology Officer'], 'Operations Director': ['Operations Director', 'Director of Operations'],
-};
+const ROLE_TITLES = Object.fromEntries(ROLE_CATALOG.map(r => [r.id, r.titles]));
 const ALL_ROLES = Object.keys(ROLE_TITLES);
-const ALL_EMP = ['1,10', '11,20', '21,50', '51,100', '101,200'];
+// Custom industries typed in the Launch form (e.g. "Jewelry"). With them the five core industries may be empty.
+const customIndustries = (Array.isArray(body.industryTerms) ? body.industryTerms : String(body.industryQuery || '').split(/[,;]/))
+  .map(s => String(s).trim()).filter(s => s.length >= 2 && s.length <= 60).slice(0, 8);
+const apifyIndustryNames = (Array.isArray(body.apifyIndustries) ? body.apifyIndustries : []).map(s => String(s).trim()).filter(s => s.length >= 3 && s.length <= 64).slice(0, 10);
 const pick = (list, allowed, allToken) => {
   if (Array.isArray(list) && list.length) {
     const hit = list.filter(x => allowed.includes(x));
@@ -61,7 +69,7 @@ const pick = (list, allowed, allToken) => {
   return [list];
 };
 const regionsSel = pick(body.regions || body.region, REGIONS);
-const industriesSel = pick(body.industries || body.industry, INDUSTRIES);
+const industriesSel = (Array.isArray(body.industries) && body.industries.length === 0 && customIndustries.length) ? [] : pick(body.industries || body.industry, INDUSTRIES);
 const roles = pick(body.roles, ALL_ROLES);
 const employees = pick(body.employees, ALL_EMP);
 const limit = Math.min(200, Math.max(5, parseInt(body.limit || $env.DAILY_LEAD_LIMIT || 40, 10)));
@@ -93,8 +101,7 @@ const industryNames = {
   ECOMMERCE_RETAIL: 'retail', FINTECH: 'financial services', REAL_ESTATE_LOGISTICS: 'logistics and supply chain',
   EDTECH: 'e-learning', HOSPITALITY: 'hospitality',
 };
-const industryTerms = industriesSel.map(i => industryNames[i]);
-if (body.industryQuery) industryTerms.push(String(body.industryQuery).trim());
+const industryTerms = industriesSel.map(i => industryNames[i]).concat(customIndustries);
 const titles = [...new Set(roles.flatMap(r => ROLE_TITLES[r]).concat(String(body.extraTitles || '').split(/[,;\n]/).map(s => s.trim()).filter(Boolean)))].slice(0, 40);
 const excludeTitles = String(body.excludeNote || '').split(/[,;\n]/).map(s => s.trim()).filter(Boolean).slice(0, 20);
 const titleInclude = { mode: 'WORD', content: titles };
@@ -111,7 +118,13 @@ const COUNTRY_CODE = {
 };
 const countries = [];
 const cities = [];
-if (placeList.length) {
+COUNTRIES.forEach(([code, name]) => { COUNTRY_CODE[name.toLowerCase()] = code; });
+const formCodes = (Array.isArray(body.placeCountries) ? body.placeCountries : []).map(c => String(c).toLowerCase()).filter(c => /^[a-z]{2}$/.test(c));
+const formCities = (Array.isArray(body.placeCities) ? body.placeCities : []).map(c => String(c).trim()).filter(c => c.length >= 3 && c.length <= 64);
+if (placeList.length && (formCodes.length || formCities.length)) {
+  countries.push(...formCodes);
+  cities.push(...formCities);
+} else if (placeList.length) {
   placeList.forEach(p => {
     const code = COUNTRY_CODE[String(p).toLowerCase()];
     if (code) countries.push(code);
@@ -130,13 +143,14 @@ const APIFY_INDUSTRY = {
   EDTECH: ['E-Learning'],
   HOSPITALITY: ['Hospitality', 'Restaurants'],
 };
-const apifyIndustries = [...new Set(industriesSel.flatMap(i => APIFY_INDUSTRY[i] || []))];
-if (body.industryQuery && String(body.industryQuery).trim().length >= 3) apifyIndustries.push(String(body.industryQuery).trim().slice(0, 64));
+const apifyIndustries = [...new Set(industriesSel.flatMap(i => APIFY_INDUSTRY[i] || []).concat(apifyIndustryNames))];
 const apifyKeywords = [];
 if (keyword && keyword.length >= 3) apifyKeywords.push(keyword.slice(0, 64));
+// A custom industry with no LinkedIn industry name is searched as a headline keyword instead.
+if (customIndustries.length > apifyIndustryNames.length) customIndustries.filter(c => c.length >= 3 && !apifyIndustries.some(a => a.toLowerCase().includes(c.toLowerCase().slice(0, 5)))).forEach(c => apifyKeywords.push(c.slice(0, 64)));
 const maxPerCompany = Math.min(5, Math.max(1, parseInt(body.maxPerCompany || 2, 10)));
 const apifyInput = {
-  jobTitles: titles.filter(t => t.length >= 3 && t.length <= 64).slice(0, 10),
+  jobTitles: [...new Set(roles.map(r => ROLE_TITLES[r][0]).concat(String(body.extraTitles || '').split(/[,;\n]/).map(s => s.trim()).filter(Boolean)))].filter(t => t.length >= 3 && t.length <= 64).slice(0, 10),
   titleMatch: 'word',
   emailType: body.emailType === 'any' ? 'any' : 'work',
   includePhones: false,
@@ -172,6 +186,8 @@ return [{ json: { aiArkSearch, apifyInput, ctx: {
   name: String(body.name || '').slice(0, 80),
   offering: String(body.offering || '').slice(0, 80),
   places: placeList,
+  customIndustries,
+  anyRevenue: body.anyRevenue === true,
   campaignId: ['4238486','4238487','4238488','4238489','4238491'].includes(String(body.campaignId || '')) ? String(body.campaignId) : '4238486',
 } } }];
 `,
@@ -232,14 +248,12 @@ return leads.slice(0, ctx.limit).map(r => ({ json: { apify: r } }));
     w,
     "Normalize + ICP Hard Filter",
     [7, 0],
-    String.raw`
+    TARGETING_JS + String.raw`
 const ctx = $('Build ICP Query').first().json.ctx;
-const NAME_TO_REGION = {
-  'united states': 'US', 'united kingdom': 'UK', 'united arab emirates': 'UAE',
-  germany: 'EUROPE', france: 'EUROPE', netherlands: 'EUROPE', spain: 'EUROPE', italy: 'EUROPE', sweden: 'EUROPE',
-  ireland: 'EUROPE', denmark: 'EUROPE', belgium: 'EUROPE', switzerland: 'EUROPE', austria: 'EUROPE', poland: 'EUROPE',
-  portugal: 'EUROPE', finland: 'EUROPE', norway: 'EUROPE',
-};
+// Country name -> dashboard region (US/UK/EUROPE/UAE, everything else OTHER). Region filters still use only the 15 core European countries.
+const NAME_TO_REGION = {};
+COUNTRIES.forEach(([code, name, region]) => { NAME_TO_REGION[name.toLowerCase()] = region === 'EUROPE' && !EUROPE_CORE.includes(code) ? 'OTHER' : region; });
+Object.assign(NAME_TO_REGION, { usa: 'US', 'united states of america': 'US', uk: 'UK', 'great britain': 'UK', england: 'UK', scotland: 'UK', wales: 'UK', uae: 'UAE' });
 const INDUSTRY_RX = {
   ECOMMERCE_RETAIL: /e-?commerce|retail|consumer goods|apparel|shopify|marketplace|direct to consumer|software/i,
   FINTECH: /fintech|financial|payment|banking|lending|insurtech/i,
@@ -248,13 +262,13 @@ const INDUSTRY_RX = {
   HOSPITALITY: /restaurant|cafe|coffee|hospitality|food|fitness|gym|wellness|hotel/i,
 };
 const out = [], seen = new Set();
+const ROLE_RX = Object.fromEntries(ROLE_CATALOG.map(r => [r.id, { rx: new RegExp(r.rx, 'i'), not: r.not ? new RegExp(r.not, 'i') : null }]));
+// Custom industries match on the first letters of each word ("jewel" finds Jewelry and Jewellery).
+const customRx = (ctx.customIndustries || []).map(c => ({ label: c, rx: new RegExp(c.toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length >= 3).map(w => w.slice(0, Math.max(4, w.length - 2))).join('|') || '^$', 'i') }));
 const roleOk = (title) => {
   const roleHit = (ctx.roles || []).some(r => {
-    if (r === 'Co-Founder') return /co-?founder/i.test(title);
-    if (r === 'Founder') return /\bfounder\b/i.test(title) && !/co-?founder/i.test(title);
-    if (r === 'CEO') return /chief executive|\bceo\b/i.test(title);
-    if (r === 'CTO') return /chief technology|\bcto\b/i.test(title);
-    return /operations director|director of operations|head of operations/i.test(title);
+    const m = ROLE_RX[r];
+    return !!m && m.rx.test(title) && !(m.not && m.not.test(title));
   });
   const extraHit = (ctx.extraTitles || []).some(t => String(title).toLowerCase().includes(String(t).toLowerCase()));
   return roleHit || extraHit;
@@ -262,15 +276,20 @@ const roleOk = (title) => {
 const pushLead = (lead) => {
   const email = String(lead.email || '').toLowerCase().trim();
   if (!email || seen.has(email)) return;
-  const region = NAME_TO_REGION[String(lead.country || '').toLowerCase()] || null;
+  const region = NAME_TO_REGION[String(lead.country || '').toLowerCase()] || (lead.country ? 'OTHER' : null);
   const namedPlace = Array.isArray(ctx.places) && ctx.places.length > 0;
   if (!namedPlace && (!region || !ctx.regionsSel.includes(region))) return;
   if (!roleOk(lead.role || '')) return;
   const employees = Number(lead.employeeCount || 0);
   if (employees && (employees < ctx.sizeMin || employees > ctx.sizeMax)) return;
   const annual = Number(lead.annualRevenue || 0);
-  if (annual && (annual < 100000 || annual > 10000000)) return;
-  const industry = ctx.industriesSel.find(k => INDUSTRY_RX[k].test(lead.hay || '')) || (ctx.industriesSel.length === 1 ? ctx.industriesSel[0] : null);
+  if (annual && !ctx.anyRevenue && (annual < 100000 || annual > 10000000)) return;
+  const hay = lead.hay || '';
+  const custom = customRx.find(c => c.rx.test(hay));
+  // Only custom industries chosen: the people search already filtered by them, so a lead with no industry text is kept.
+  const industry = ctx.industriesSel.find(k => INDUSTRY_RX[k].test(hay)) || (custom && custom.label)
+    || (ctx.industriesSel.length === 1 && !customRx.length ? ctx.industriesSel[0] : null)
+    || (!ctx.industriesSel.length && customRx.length && !hay.replace(/[\s,]/g, '') ? customRx[0].label : null);
   if (!industry) return;
   const domain = String(lead.domain || '').toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
   if (!domain) return;
@@ -279,18 +298,13 @@ const pushLead = (lead) => {
     email, firstName: lead.firstName || '', lastName: lead.lastName || '', role: lead.role || '',
     linkedinUrl: lead.linkedinUrl || null,
     companyName: lead.companyName || domain, companyDomain: domain, companyWebsite: 'https://' + domain,
-    country: lead.country, region, industry,
+    country: lead.country, region: region || 'OTHER', industry,
     employeeCount: employees || null, annualRevenue: annual || null, sourceId: lead.sourceId || null,
     leadSource: ctx.provider || 'ai-ark',
     preverified: true, emailStatus: 'VALID',
   } });
 };
-const CODE_TO_COUNTRY = {
-  us: 'United States', gb: 'United Kingdom', ae: 'United Arab Emirates',
-  de: 'Germany', fr: 'France', nl: 'Netherlands', es: 'Spain', it: 'Italy', se: 'Sweden',
-  ie: 'Ireland', dk: 'Denmark', be: 'Belgium', ch: 'Switzerland', at: 'Austria', pl: 'Poland',
-  pt: 'Portugal', fi: 'Finland', no: 'Norway',
-};
+const CODE_TO_COUNTRY = Object.fromEntries(COUNTRIES.map(([code, name]) => [code, name]));
 const staffCount = (v) => {
   if (typeof v === 'number') return v;
   const nums = String(v || '').match(/\d+/g);
@@ -304,7 +318,7 @@ for (const it of $input.all()) {
     const email = String(a.email || a.workEmail || '').toLowerCase().trim();
     const personal = a.emailType === 'personal' || /@(gmail|googlemail|yahoo|hotmail|outlook|live|icloud|aol)\./i.test(email);
     if (ctx.emailType !== 'any' && personal) continue;
-    const country = CODE_TO_COUNTRY[String(a.countryCode || '').toLowerCase()] || '';
+    const country = CODE_TO_COUNTRY[String(a.countryCode || '').toLowerCase()] || String(a.country || '').trim();
     pushLead({
       email, firstName: a.firstName || '', lastName: a.lastName || '', role: a.jobTitle || a.primaryTitle || '',
       linkedinUrl: a.linkedinUrl || null, companyName: a.companyName || '', domain: a.companyDomain || '',
@@ -513,7 +527,9 @@ return $input.all().map(it => {
     '<booking_link>' + booking + '</booking_link>\n<sender_name>' + sender + ', BrandFly</sender_name>\n' +
     '<offering>' + (ctx.offering || ctx.service || 'none') + '</offering>\n' +
     '<preferred_service_tiebreaker>' + (ctx.service || 'none') + '</preferred_service_tiebreaker>\n' +
-    '<ticket_gate>' + ($env.TICKET_GATE === 'off' ? 'off' : 'on') + '</ticket_gate>';
+    '<ticket_gate>' + ($env.TICKET_GATE === 'off' ? 'off' : 'on') + '</ticket_gate>\n' +
+    '<campaign_targeting>' + JSON.stringify({ places: ctx.places || [], industries: (ctx.industriesSel || []).concat(ctx.customIndustries || []),
+      roles: ctx.roles || [], revenue: ctx.anyRevenue ? 'any' : '100k-10M', offering: ctx.offering || null }) + '</campaign_targeting>';
   return { json: { ...l, llmRequest: { model: $env.OPENAI_MODEL || 'gpt-4o', temperature: 0.4, response_format: { type: 'json_object' },
     messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: user }] } } };
 });

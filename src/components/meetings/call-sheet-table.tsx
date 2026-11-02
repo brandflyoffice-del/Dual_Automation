@@ -73,13 +73,13 @@ export function CallSheetTable({
       },
       {
         id: "company",
-        accessorFn: (r) => `${r.company} ${INDUSTRY_LABEL[r.industry as Industry] ?? ""} ${r.country}`,
+        accessorFn: (r) => `${r.company} ${INDUSTRY_LABEL[r.industry as Industry] ?? r.industry} ${r.country}`,
         header: "Company & Revenue",
         cell: ({ row }) => (
           <div>
             <div className="text-sm font-medium">{row.original.company}</div>
             <div className="font-metric text-[11px] text-muted-foreground">
-              {formatRevenueBand(row.original.revenue)} · {INDUSTRY_LABEL[row.original.industry as Industry]}
+              {formatRevenueBand(row.original.revenue)} · {INDUSTRY_LABEL[row.original.industry as Industry] ?? row.original.industry}
             </div>
           </div>
         ),
@@ -164,7 +164,7 @@ export function CallSheetTable({
     globalFilterFn: (row, _id, value: string) => {
       const q = value.toLowerCase();
       const r = row.original;
-      return [r.prospectName, r.company, r.role, r.country, r.painPoint, r.service, INDUSTRY_LABEL[r.industry as Industry], r.email]
+      return [r.prospectName, r.company, r.role, r.country, r.painPoint, r.service, INDUSTRY_LABEL[r.industry as Industry] ?? r.industry, r.email]
         .filter(Boolean)
         .join(" ")
         .toLowerCase()

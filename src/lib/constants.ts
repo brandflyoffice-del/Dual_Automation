@@ -1,4 +1,5 @@
 // Single source of truth for Fenebris business rules (mirrored in the n8n AI prompts).
+import { EMPLOYEE_BUCKETS, ROLE_CATALOG } from "../../n8n/targeting.mjs";
 
 /** Launch-campaign source. Same filters either way; only the people search changes. */
 export const LEAD_PROVIDERS = [
@@ -36,7 +37,7 @@ export function pickCampaign(input: { offering?: string; service?: string; sente
 
 export const ICP = {
   regions: ["US", "UK", "EUROPE", "UAE"] as const,
-  roles: ["Founder", "Co-Founder", "CEO", "CTO", "Operations Director"],
+  roles: ROLE_CATALOG.filter((r) => r.preset).map((r) => r.id), // default decision-makers; full list in ROLE_OPTIONS
   industries: ["ECOMMERCE_RETAIL", "FINTECH", "REAL_ESTATE_LOGISTICS", "EDTECH", "HOSPITALITY"] as const,
   revenueMin: 100_000,
   revenueMax: 10_000_000,
@@ -189,13 +190,24 @@ export const EUROPE_COUNTRIES = [
   { code: "no", label: "Norway" },
 ] as const;
 
-export const EMPLOYEE_RANGES = [
-  { id: "1,10", label: "1–10" },
-  { id: "11,20", label: "11–20" },
-  { id: "21,50", label: "21–50" },
-  { id: "51,100", label: "51–100" },
-  { id: "101,200", label: "101–200" },
-] as const;
-export type EmployeeRange = (typeof EMPLOYEE_RANGES)[number]["id"];
+export const EMPLOYEE_RANGES = EMPLOYEE_BUCKETS as { id: string; label: string; preset: boolean }[];
+export const DEFAULT_EMPLOYEE_RANGES = EMPLOYEE_RANGES.filter((e) => e.preset).map((e) => e.id);
+
+/** Every role the Launch form offers, grouped; the preset ones are on by default. */
+export const ROLE_OPTIONS = ROLE_CATALOG as { id: string; group: string; titles: string[]; preset: boolean }[];
+export const ROLE_IDS = ROLE_OPTIONS.map((r) => r.id) as [string, ...string[]];
+
+/** Extra roles worth adding for each built-in service line (on top of the default decision-makers). */
+export const LINE_ROLE_HINTS: Record<string, string[]> = {
+  web: ["Head of E-commerce"],
+  marketing: ["CMO", "Marketing Director", "Head of E-commerce"],
+  software: ["VP Engineering", "Head of Technology"],
+  systems: ["CIO", "Head of Technology", "General Manager"],
+  rfid: ["General Manager", "Head of Technology"],
+};
+
+/** The old "service to lead with" code that matches each built-in service line (used for badges and the AI tie-breaker). */
+export const LINE_SERVICE: Record<string, Service | null> = { web: "WEB_ECOM", marketing: "DIGITAL_MARKETING", software: null, systems: "MANAGED_IT", rfid: null };
+export type EmployeeRange = string;
 
 export const IST_TZ = "Asia/Kolkata";

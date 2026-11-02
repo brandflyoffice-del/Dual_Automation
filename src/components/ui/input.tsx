@@ -7,7 +7,7 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
       type={type}
       data-slot="input"
       className={cn(
-        "flex h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:opacity-50",
+        "flex h-9 w-full min-w-0 rounded-md border border-input bg-card px-3 py-1 text-sm shadow-[0_1px_1px_rgba(15,23,42,0.03)] outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:opacity-50",
         className,
       )}
       {...props}
@@ -29,7 +29,7 @@ function Textarea({ className, ...props }: React.ComponentProps<"textarea">) {
 }
 
 function Label({ className, ...props }: React.ComponentProps<"label">) {
-  return <label className={cn("text-xs font-medium text-muted-foreground", className)} {...props} />;
+  return <label className={cn("text-[13px] font-medium text-foreground", className)} {...props} />;
 }
 
 export { Input, Textarea, Label };

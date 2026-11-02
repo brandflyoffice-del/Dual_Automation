@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { callN8n, n8nWebhooks } from "@/lib/config";
-import { EMPLOYEE_RANGES, EUROPE_COUNTRIES, ICP, SERVICES } from "@/lib/constants";
+import { EMPLOYEE_RANGES, EUROPE_COUNTRIES, ICP, ROLE_IDS, SERVICES } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -15,13 +15,18 @@ const schema = z
     region: z.enum(["ALL", ...ICP.regions]).optional(),
     industry: z.enum(["ALL", ...ICP.industries]).optional(),
     regions: z.array(z.enum(ICP.regions)).min(1).optional(),
-    industries: z.array(z.enum(ICP.industries)).min(1).optional(),
-    roles: z.array(z.enum(ICP.roles)).min(1).optional(),
+    industries: z.array(z.enum(ICP.industries)).optional(),
+    industryTerms: z.array(z.string().trim().min(2).max(60)).max(8).optional(),
+    apifyIndustries: z.array(z.string().trim().min(3).max(64)).max(10).optional(),
+    roles: z.array(z.enum(ROLE_IDS)).min(1).optional(),
     employees: z.array(z.enum(employeeIds)).min(1).optional(),
     europeCountries: z.array(z.enum(europeCodes)).min(1).optional(),
     service: z.enum(SERVICES).nullable().optional(),
     keyword: z.string().trim().max(80).optional(),
     places: z.array(z.string().trim().min(2).max(60)).max(20).optional(),
+    placeCountries: z.array(z.string().regex(/^[a-z]{2}$/)).max(60).optional(),
+    placeCities: z.array(z.string().trim().min(2).max(64)).max(10).optional(),
+    anyRevenue: z.boolean().optional(),
     industryQuery: z.string().trim().max(80).optional(),
     offering: z.string().trim().max(80).optional(),
     extraTitles: z.string().trim().max(120).optional(),
@@ -34,7 +39,7 @@ const schema = z
     campaignId: z.enum(["4238486", "4238487", "4238488", "4238489", "4238491"]).optional(),
   })
   .refine((d) => (d.regions?.length ?? 0) > 0 || !!d.region, { message: "Pick at least one region" })
-  .refine((d) => (d.industries?.length ?? 0) > 0 || !!d.industry, { message: "Pick at least one industry" });
+  .refine((d) => (d.industries?.length ?? 0) > 0 || (d.industryTerms?.length ?? 0) > 0 || !!d.industryQuery || !!d.industry, { message: "Pick at least one industry" });
 
 /** Dashboard → the lead-engine lane of Fenebris_Outreach_Autopilot. ICP bounds are re-checked here and again in n8n. */
 export async function POST(req: Request) {
@@ -43,7 +48,7 @@ export async function POST(req: Request) {
 
   const payload = {
     ...parsed.data,
-    icp: { revenueMin: ICP.revenueMin, revenueMax: ICP.revenueMax, minTicket: ICP.minTicket },
+    icp: { revenueMin: ICP.revenueMin, revenueMax: parsed.data.anyRevenue ? null : ICP.revenueMax, minTicket: ICP.minTicket },
     triggeredAt: new Date().toISOString(),
     source: "dashboard",
   };
