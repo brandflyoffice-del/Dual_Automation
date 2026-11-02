@@ -447,7 +447,9 @@ if (auto && valid && canThread && !accept && !heldAcceptance && !flagged && !pri
   if (ctx.intent === 'Positive_Booking_Intent' && ctx.confidence >= 0.6) autoSend = true;
   if (ctx.intent === 'Question_Needs_FollowUp' && ctx.confidence >= 0.8 && draft.safe_to_send === true) autoSend = true;
 }
-const sendPayload = valid ? Object.assign({ email_body: html, reply_message_id: ctx.ids.replyMessageId,
+// reply_email_body is what Smartlead quotes under our answer: only the prospect's own words, never the whole template chain.
+const quoted = escHtml(String(ctx.replyText || '').slice(0, 1500)).replace(/\n/g, '<br>');
+const sendPayload = valid ? Object.assign({ email_body: html, reply_email_body: quoted, reply_message_id: ctx.ids.replyMessageId,
   reply_email_time: ctx.ids.replyTime ? new Date(ctx.ids.replyTime).toISOString() : new Date().toISOString() },
   ctx.ids.statsId ? { email_stats_id: ctx.ids.statsId } : {}) : null;
 return [{ json: { ctx: { ...ctx, draft, accept, autoSend, offerText, sendPayload } } }];
@@ -676,7 +678,10 @@ const text = 'Hi ' + bk.firstName + ',\n\nYour slot is booked for ' + bk.label +
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const html = esc(text).split(/\n{2,}/).map(p => '<p style="margin:0 0 14px 0">' + p.replace(/\n/g, '<br>') + '</p>').join('');
 const canSend = !!(ids.campaignId && ids.leadId && ids.replyMessageId && ids.statsId);
-const sendPayload = Object.assign({ email_body: html, reply_message_id: ids.replyMessageId,
+// Quote only the prospect's last message (cut at its own "On ... wrote:"), not the earlier template emails.
+const lastText = String((lastReply && lastReply.email_body) || '').replace(/<br\s*\/?>|<\/p>|<\/div>/gi, '\n').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
+  .split(/\r?\n\s*On .{5,200} wrote:|\r?\n-{2,}\s*Original Message|\r?\n>/i)[0].replace(/[ \t]+/g, ' ').trim().slice(0, 1500);
+const sendPayload = Object.assign({ email_body: html, reply_email_body: esc(lastText).replace(/\n/g, '<br>'), reply_message_id: ids.replyMessageId,
   reply_email_time: ids.replyTime ? new Date(ids.replyTime).toISOString() : new Date().toISOString() }, ids.statsId ? { email_stats_id: ids.statsId } : {});
 return [{ json: { canSend, ids, sendPayload, record: { email: bk.email, subject: 'Meeting confirmed', body: text } } }];
 `,
