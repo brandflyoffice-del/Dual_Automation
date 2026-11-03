@@ -169,6 +169,7 @@ export const EMAIL_EVENT_TYPES = [
   "REPLY_RECEIVED",
   "EMAIL_BOUNCED",
   "AI_REPLY_SENT",
+  "MANUAL_REPLY_SENT", // written by a person in the dashboard Inbox
 ] as const;
 
 /** Company-size buckets the lead search is allowed to use. Default = all of them. */

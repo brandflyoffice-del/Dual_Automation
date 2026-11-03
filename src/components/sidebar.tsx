@@ -2,17 +2,19 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, CalendarCheck2, FileBarChart2, LogOut, Mail, Radar, Layers, Settings } from "lucide-react";
+import { BarChart3, CalendarCheck2, FileBarChart2, Inbox, LineChart, LogOut, Mail, Radar, Layers, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SystemStatus } from "@/components/system-status";
 import { LaunchCampaign } from "@/components/launch-campaign";
 
 const NAV = [
   { href: "/dashboard", label: "Command Center", short: "Home", icon: BarChart3 },
+  { href: "/inbox", label: "Inbox", short: "Inbox", icon: Inbox },
   { href: "/meetings", label: "Meetings", short: "Meetings", icon: CalendarCheck2 },
   { href: "/leads", label: "Lead Intelligence", short: "Leads", icon: Radar },
   { href: "/services", label: "Services", short: "Services", icon: Layers },
   { href: "/campaigns", label: "Sequence Monitor", short: "Campaigns", icon: Mail },
+  { href: "/analytics", label: "Email Analytics", short: "Analytics", icon: LineChart },
   { href: "/reports", label: "Weekly Reports", short: "Reports", icon: FileBarChart2 },
   { href: "/settings", label: "Settings", short: "Settings", icon: Settings },
 ];
@@ -82,7 +84,7 @@ export function MobileNav({ brandName, logoVersion }: BrandProps) {
           </button>
         </div>
       </header>
-      <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-7 border-t border-border bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-40 flex overflow-x-auto border-t border-border bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
         {NAV.map(({ href, short, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(href + "/");
           return (
@@ -90,7 +92,7 @@ export function MobileNav({ brandName, logoVersion }: BrandProps) {
               key={href}
               href={href}
               className={cn(
-                "flex flex-col items-center gap-0.5 px-1 py-2 text-[10px]",
+                "flex min-w-16 flex-1 shrink-0 flex-col items-center gap-0.5 px-1 py-2 text-[10px]",
                 active ? "font-medium text-emerald" : "text-muted-foreground",
               )}
             >

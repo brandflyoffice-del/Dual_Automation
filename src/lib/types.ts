@@ -97,3 +97,36 @@ export type SequenceLead = {
   sentiment: string | null;
   steps: { step: number; subject: string; body: string; status: string; sentAt: string | null; scheduledAt: string | null; opens: number; clicks: number; replied: boolean }[];
 };
+
+/** One prospect in one Smartlead campaign, as the Inbox lists it. */
+export type InboxConversation = {
+  key: string;
+  campaignId: string;
+  campaignName: string;
+  email: string;
+  name: string;
+  company: string | null;
+  dbLeadId: string | null;
+  subject: string;
+  stepsSent: number;
+  lastSentAt: string | null;
+  repliedAt: string | null;
+  lastActivity: string | null;
+  bounced: boolean;
+  unsubscribed: boolean;
+  category: string | null;
+  sentiment: string | null;
+  needsHuman: boolean;
+  stage: string | null;
+};
+
+export type InboxMessage = {
+  type: "SENT" | "REPLY";
+  from: string;
+  to: string;
+  time: string;
+  subject: string | null;
+  html: string;
+  quoteHtml: string;
+  step: number | null;
+};

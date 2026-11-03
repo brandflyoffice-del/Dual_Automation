@@ -145,3 +145,24 @@ export function StepBars({ data }: { data: { name: string; openRate: number; rep
     </div>
   );
 }
+
+/** Day-by-day sent and replied counts (Email Analytics). */
+export function DailyEmailChart({ data }: { data: { date: string; sent: number; replied: number; bounced: number }[] }) {
+  const rows = data.map((d) => ({ ...d, label: new Date(d.date + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }) }));
+  return (
+    <div className="h-[260px] w-full">
+      <ResponsiveContainer>
+        <BarChart data={rows} margin={{ left: -16, right: 8, top: 8, bottom: 0 }}>
+          <CartesianGrid vertical={false} stroke="rgba(15,23,42,0.07)" />
+          <XAxis dataKey="label" tick={AXIS} axisLine={false} tickLine={false} minTickGap={12} />
+          <YAxis tick={AXIS} axisLine={false} tickLine={false} allowDecimals={false} />
+          <Tooltip {...tooltipStyle} />
+          <Legend wrapperStyle={{ fontSize: 11, color: "#5b6477" }} iconType="circle" iconSize={8} />
+          <Bar dataKey="sent" name="Sent" fill="#6366f1" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="replied" name="Replied" fill="#10b981" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="bounced" name="Bounced" fill="#f43f5e" radius={[4, 4, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}

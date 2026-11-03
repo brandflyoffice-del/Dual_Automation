@@ -41,6 +41,9 @@ export function brandFor(campaignId) {
         wordmark: `<span style="color:#003388;">Tapadia</span><span style="color:#FF7302;"> Tech</span>` };
 }
 
+/** Joins the template onto one line (newlines between tags dropped, any inside text become a space). */
+const oneLine = (html) => html.replace(/>\s*\r?\n\s*</g, "><").replace(/\s*\r?\n\s*/g, " ");
+
 /**
  * The client's original card design (grey page, white card, brand header band, orange button, navy signature footer
  * with the phone number) with the logo written as styled text, not an image: Gmail blocks or breaks remote images
@@ -51,7 +54,9 @@ export function brandFor(campaignId) {
 export function emailHtml({ brand, content, booking = BOOKING }) {
   const font = "font-family:Arial,Helvetica,sans-serif;";
   const optOut = /no thanks/i.test(content) ? "" : `<div style="margin-top:14px;font-size:12px;color:#cbd5e1;">Not relevant? Reply &quot;no thanks&quot; and I won't email again.</div>`;
-  return `<!DOCTYPE html>
+  // One line on purpose: Smartlead turns every newline in the HTML into <br>, and a <br> between table rows is pushed out
+  // of the table by the mail client, which shows up as big empty gaps above and below the header.
+  return oneLine(`<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light only"><title></title></head>
 <body style="margin:0;padding:0;background:#eef2f5;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef2f5;">
@@ -78,7 +83,7 @@ ${optOut}
 </table>
 </td></tr>
 </table>
-</body></html>`;
+</body></html>`);
 }
 
 /** The written part of an existing step: between the header row and the button table of the old template. */
