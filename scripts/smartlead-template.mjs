@@ -1,4 +1,4 @@
-// Rebuilds a Smartlead campaign's emails in the deliverability-friendly template (no images, one button, text signature).
+// Rebuilds a Smartlead campaign's emails in the client's card template with a text logo (no images), one button and the signature footer.
 // Keeps each step's wording (or, with --ai, uses the AI-written {{subject_N}} / {{email_N}} fields the lead lane fills).
 // A backup of the current sequences is written to deploy/.local/smartlead-backup/ before anything changes.
 //
@@ -16,8 +16,6 @@ const cfg = JSON.parse(readFileSync("deploy/.local/n8n-config.json", "utf8"));
 const KEY = encodeURIComponent(cfg.SMARTLEAD_API_KEY);
 const BOOKING = cfg.BOOKING_LINK || "https://cal.com/brandfly-office-ax8wq8/30min";
 const API = "https://server.smartlead.ai/api/v1";
-// Logos are served by our own dashboard (public/brand/email, no login), so they load fast and never break on a third-party site.
-const ASSETS = "https://app.zmart.cloud/brand/email";
 
 async function sl(method, path, body) {
   const r = await fetch(`${API}${path}${path.includes("?") ? "&" : "?"}api_key=${KEY}`, {
@@ -37,41 +35,45 @@ async function sl(method, path, body) {
 /** Brand per campaign: 4238487 is Expert in SEO, every other campaign is TapadiaTech. */
 export function brandFor(campaignId) {
   return String(campaignId) === "4238487"
-    ? { name: "Expert in SEO", site: "ExpertinSEO.com", url: "https://expertinseo.com", accent: "#101A56", link: "#101A56", logo: { src: `${ASSETS}/expertinseo.png`, w: 150, h: 50, bg: "#101A56" } }
-    : { name: "Tapadia Tech", site: "TapadiaTech.com", url: "https://tapadiatech.com", accent: "#FF7302", link: "#003388", logo: { src: `${ASSETS}/tapadiatech.png`, w: 140, h: 46, bg: "" } };
+    ? { name: "Expert in SEO", site: "ExpertinSEO.com", url: "https://expertinseo.com", header: "#101A56", button: "#101A56", footer: "#101A56",
+        wordmark: `<span style="color:#ffffff;">Expert in SEO</span>` }
+    : { name: "Tapadia Tech", site: "TapadiaTech.com", url: "https://tapadiatech.com", header: "#D6E7FA", button: "#FF7302", footer: "#003388",
+        wordmark: `<span style="color:#003388;">Tapadia</span><span style="color:#FF7302;"> Tech</span>` };
 }
 
 /**
- * One email: reads like a personal note (left aligned, 15px, max 560px wide, no images), one booking button,
- * text signature with the phone footer the client asked for. Fluid widths, so it is responsive without media queries.
+ * The client's original card design (grey page, white card, brand header band, orange button, navy signature footer
+ * with the phone number) with the logo written as styled text, not an image: Gmail blocks or breaks remote images
+ * (spam folder, image-off clients, quoted replies), and a text wordmark always renders. The layout is fluid
+ * (width 100%, max 600px), so it fits phones without media queries. Keep the content <td> and the button table
+ * attributes as they are: innerContent() finds the written part of a step by them.
  */
 export function emailHtml({ brand, content, booking = BOOKING }) {
   const font = "font-family:Arial,Helvetica,sans-serif;";
-  const optOut = /no thanks/i.test(content) ? "" : `<p style="margin:14px 0 0;font-size:11px;line-height:1.5;color:#9ca3af;">Not relevant? Just reply &quot;no thanks&quot; and I won't email again.</p>`;
+  const optOut = /no thanks/i.test(content) ? "" : `<div style="margin-top:14px;font-size:12px;color:#cbd5e1;">Not relevant? Reply &quot;no thanks&quot; and I won't email again.</div>`;
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light only"><title></title></head>
-<body style="margin:0;padding:0;background:#ffffff;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#ffffff;">
-<tr><td style="padding:20px 16px;">
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:560px;">
-<tr><td style="padding:0 0 22px;">
-<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td style="${brand.logo.bg ? `background:${brand.logo.bg};padding:10px 14px;border-radius:8px;` : ""}">
-<a href="${brand.url}" style="text-decoration:none;"><img src="${brand.logo.src}" width="${brand.logo.w}" height="${brand.logo.h}" alt="${brand.name}" style="display:block;width:${brand.logo.w}px;height:${brand.logo.h}px;border:0;outline:none;${font}font-size:18px;font-weight:bold;color:${brand.logo.bg ? "#ffffff" : brand.link};"></a>
-</td></tr></table>
+<body style="margin:0;padding:0;background:#eef2f5;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef2f5;">
+<tr><td align="center" style="padding:28px 12px;">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden;">
+<tr><td style="background:${brand.header};padding:26px 32px;text-align:center;">
+<a href="${brand.url}" style="${font}font-size:28px;line-height:1.2;font-weight:700;letter-spacing:0.3px;text-decoration:none;">${brand.wordmark}</a>
 </td></tr>
-<tr><td style="${font}font-size:15px;line-height:1.6;color:#1f2937;">
+<tr><td style="padding:36px 32px 12px;${font}font-size:16px;line-height:1.65;color:#1f2937;">
 ${content}
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:22px 0 4px;"><tr><td style="background:${brand.accent};border-radius:6px;">
-<a href="${booking}" style="display:inline-block;padding:11px 20px;${font}font-size:14px;font-weight:bold;color:#ffffff;text-decoration:none;">Book a free 30-minute Google Meet</a>
-</td></tr></table>
+<table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:28px auto 8px;">
+<tr><td style="background:${brand.button};border-radius:8px;">
+<a href="${booking}" style="display:inline-block;padding:16px 36px;${font}font-size:16px;font-weight:700;color:#ffffff;text-decoration:none;">Book a free consultation</a>
 </td></tr>
-<tr><td style="padding-top:22px;">
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-top:1px solid #e5e7eb;"><tr><td style="padding-top:14px;${font}font-size:13px;line-height:1.55;color:#4b5563;">
-<span style="font-size:14px;font-weight:bold;color:#111827;">Jay T</span><br>
-<a href="${brand.url}" style="color:${brand.link};font-weight:bold;text-decoration:none;">${brand.site}</a><br>
-1-213-258-1582
+</table>
+</td></tr>
+<tr><td style="background:${brand.footer};padding:28px 32px;text-align:center;${font}color:#e5e7eb;">
+<div style="font-size:18px;font-weight:700;color:#ffffff;">Jay T</div>
+<div style="margin-top:8px;font-size:15px;"><a href="${brand.url}" style="color:#dbeafe;text-decoration:none;">${brand.site}</a></div>
+<div style="margin-top:6px;font-size:15px;color:#e5e7eb;">1-213-258-1582</div>
 ${optOut}
-</td></tr></table>
+<div style="margin-top:16px;font-size:12px;color:#cbd5e1;">Copyright &copy; 2026 ${brand.name}</div>
 </td></tr>
 </table>
 </td></tr>
