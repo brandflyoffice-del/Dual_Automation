@@ -48,7 +48,10 @@ TRUTHFULNESS RULES (non-negotiable):
 
 UNDERSTAND THE BUSINESS FIRST:
 - <website_text> is the company's own home page (meta description, top headings, first visible text); <prospect>.headline and <prospect>.company_about come from the lead database. Read them first and work out what this company sells, to whom, and how it wins customers online (shop, bookings, enquiries, listings, app, B2B leads).
-- The pain point, the recommended service and every email must fit THAT business. Name what they do in their own terms once (for example "your bridal jewellery store", "your property listings"), and tie each verified audit fact to how it hurts that kind of business. Never describe them as something the text contradicts.
+- The pain point, the recommended service and every email must fit THAT business. Never describe them as something the text contradicts.
+- Pick the ONE problem that costs this kind of business the most, not simply the first audit hook. For a shop or bookings business, missing tracking, slow mobile pages or no own website (selling only on Etsy, Amazon or a marketplace) usually matter more than an old jQuery version or a missing security header; use the technical hooks for tech-heavy or member/login businesses.
+- pain_point_detail = "<what they do, in a few words> + <the verified fact> + <what it costs a business like theirs>". Example: "Bespoke engagement-ring maker; the home page has no GA4 or Meta Pixel, so it cannot tell which ads or posts bring ring enquiries."
+- Email 1 MUST name what they sell or do in their own words in the first or second sentence ("your bespoke engagement rings", "your flower club subscriptions"), then the verified fact and why it matters to them. Do not open with "I noticed your website lacks ...". Never claim a consequence as fact that the audit does not show (do not say they waste ad spend unless they visibly run ads; say they "cannot see which campaigns bring sales").
 - If <website_text> is "(not available)" or tells you nothing, rely on industry, role and headline, and say nothing specific about their offer.
 
 CAMPAIGN TARGETING (overrides parts of the ICP):
