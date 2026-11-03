@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>BrandFly Outreach - User Guide</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm 18mm 16mm; }
+  :root { --ink:#0f172a; --body:#334155; --muted:#64748b; --line:#e2e8f0; --green:#059669; --green-bg:#ecfdf5; --amber-bg:#fffbeb; --amber:#b45309; --blue-bg:#eff6ff; --blue:#1d4ed8; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; background:#fff; }
+  body { font-family: "Segoe UI", Arial, Helvetica, sans-serif; color: var(--body); font-size: 10.5pt; line-height: 1.55; }
+  h1, h2, h3 { color: var(--ink); line-height: 1.25; margin: 0; }
+  h2 { font-size: 17pt; margin: 0 0 4mm; padding-top: 2mm; }
+  h2 .num { display:inline-block; min-width: 9mm; color: var(--green); }
+  h3 { font-size: 12pt; margin: 6mm 0 2mm; }
+  p { margin: 0 0 3mm; }
+  ul, ol { margin: 0 0 3mm; padding-left: 6mm; }
+  li { margin: 0 0 1.4mm; }
+  b, strong { color: var(--ink); }
+  .ui { font-weight: 600; color: var(--ink); background: #f1f5f9; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; white-space: nowrap; }
+  section { page-break-before: always; }
+  .keep { page-break-inside: avoid; }
+  .lead { font-size: 11.5pt; color: var(--body); }
+  .muted { color: var(--muted); }
+
+  /* cover */
+  .cover { height: 255mm; display:flex; flex-direction:column; justify-content:space-between; }
+  .cover img { width: 46mm; }
+  .cover h1 { font-size: 30pt; margin-top: 48mm; letter-spacing: -0.5px; }
+  .cover .sub { font-size: 13pt; color: var(--muted); margin-top: 5mm; max-width: 140mm; }
+  .cover .band { height: 3mm; width: 40mm; background: var(--green); border-radius: 2mm; margin-top: 10mm; }
+  .cover .meta { font-size: 9.5pt; color: var(--muted); border-top: 1px solid var(--line); padding-top: 4mm; }
+
+  /* contents */
+  .toc { columns: 2; column-gap: 10mm; margin-top: 4mm; }
+  .toc div { break-inside: avoid; padding: 2mm 0; border-bottom: 1px dashed var(--line); }
+  .toc .n { color: var(--green); font-weight: 700; display:inline-block; width: 8mm; }
+
+  /* flow */
+  .flow { display:grid; grid-template-columns: repeat(3, 1fr); gap: 3mm; margin: 4mm 0 5mm; }
+  .step { border: 1px solid var(--line); border-radius: 3mm; padding: 3mm 3.5mm; background: #fff; }
+  .step .k { font-size: 8pt; font-weight: 700; color: var(--green); text-transform: uppercase; letter-spacing: .5px; }
+  .step .t { font-weight: 700; color: var(--ink); margin: 0.5mm 0 1mm; }
+  .step .d { font-size: 9.5pt; }
+
+  /* boxes */
+  .tip, .warn, .note { border-radius: 2.5mm; padding: 3mm 4mm; margin: 3mm 0 4mm; font-size: 10pt; page-break-inside: avoid; }
+  .tip { background: var(--green-bg); border-left: 3px solid var(--green); }
+  .warn { background: var(--amber-bg); border-left: 3px solid var(--amber); }
+  .note { background: var(--blue-bg); border-left: 3px solid var(--blue); }
+  .tip b:first-child, .warn b:first-child, .note b:first-child { display:block; margin-bottom: 0.5mm; }
+
+  /* tables */
+  table { width:100%; border-collapse: collapse; margin: 2mm 0 4mm; font-size: 9.8pt; page-break-inside: auto; }
+  th { text-align:left; background:#f8fafc; color: var(--ink); font-weight:700; border-bottom: 1.5px solid var(--line); padding: 2mm 2.5mm; }
+  td { border-bottom: 1px solid var(--line); padding: 2mm 2.5mm; vertical-align: top; }
+  tr { page-break-inside: avoid; }
+  td:first-child { white-space: nowrap; font-weight: 600; color: var(--ink); }
+
+  /* numbered steps */
+  ol.steps { list-style: none; counter-reset: s; padding-left: 0; }
+  ol.steps > li { counter-increment: s; position: relative; padding-left: 9mm; margin-bottom: 2.6mm; page-break-inside: avoid; }
+  ol.steps > li::before { content: counter(s); position:absolute; left:0; top:0.3mm; width:6mm; height:6mm; border-radius:50%; background: var(--green); color:#fff; font-size: 8.5pt; font-weight:700; text-align:center; line-height:6mm; }
+
+  .two { display:grid; grid-template-columns: 1fr 1fr; gap: 6mm; }
+  table.compact td, table.compact th { padding: 1.3mm 2.5mm; font-size: 9.3pt; }
+  section.tight h3 { margin-top: 4mm; }
+  section.tight ol.steps > li { margin-bottom: 1.6mm; }
+  .faq { margin-bottom: 3.5mm; page-break-inside: avoid; }
+  .faq .q { font-weight: 700; color: var(--ink); }
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="cover">
+  <div>
+    <img src="../../public/brand/brandfly.png" alt="BrandFly">
+    <h1>Outreach Dashboard<br>User Guide</h1>
+    <div class="band"></div>
+    <p class="sub">How to find new leads, run personalised email campaigns, let the AI answer replies and get meetings booked, all from one dashboard.</p>
+  </div>
+  <div class="meta">Dashboard: <b>https://app.zmart.cloud</b> &nbsp;·&nbsp; Your login details are sent to you separately &nbsp;·&nbsp; Version: November 2026</div>
+</div>
+
+<!-- CONTENTS -->
+<section>
+  <h2>Contents</h2>
+  <div class="toc">
+    <div><span class="n">1</span>How the system works</div>
+    <div><span class="n">2</span>Signing in</div>
+    <div><span class="n">3</span>Your 5-minute daily routine</div>
+    <div><span class="n">4</span>The menu at a glance</div>
+    <div><span class="n">5</span>Launching a campaign</div>
+    <div><span class="n">6</span>Replies and the AI</div>
+    <div><span class="n">7</span>The Inbox</div>
+    <div><span class="n">8</span>Meetings</div>
+    <div><span class="n">9</span>Leads and follow-ups</div>
+    <div><span class="n">10</span>Email Analytics</div>
+    <div><span class="n">11</span>Exporting data</div>
+    <div><span class="n">12</span>Settings and services</div>
+    <div><span class="n">13</span>Mailboxes and good practice</div>
+    <div><span class="n">14</span>Questions and fixes</div>
+  </div>
+
+  <div class="note" style="margin-top:8mm"><b>In one sentence</b>You choose who to reach. The system finds those people, studies each company's website, writes a personal email sequence, answers replies within seconds and books meetings straight into your Google Calendar.</div>
+</section>
+
+<!-- 1 -->
+<section>
+  <h2><span class="num">1</span>How the system works</h2>
+  <p class="lead">Six steps run automatically. You only start step 1 and join the meetings.</p>
+  <div class="flow">
+    <div class="step"><div class="k">Step 1 · You</div><div class="t">Launch a search</div><div class="d">Describe who you want to reach (place, industry, role, company size). Takes 1 minute.</div></div>
+    <div class="step"><div class="k">Step 2 · Automatic</div><div class="t">Leads are found and studied</div><div class="d">Verified decision makers are found. Each company's website is read and checked for real problems (speed, tracking, security, no own shop).</div></div>
+    <div class="step"><div class="k">Step 3 · Automatic</div><div class="t">Personal emails are written</div><div class="d">The AI writes 4 emails per lead about that company's business and its verified problem.</div></div>
+    <div class="step"><div class="k">Step 4 · Automatic</div><div class="t">Emails go out with follow-ups</div><div class="d">Email 1 is sent, then follow-ups on day 3, 7 and 11, but only while the person has not replied.</div></div>
+    <div class="step"><div class="k">Step 5 · Automatic</div><div class="t">The AI answers replies</div><div class="d">Usually within 20-30 seconds, in the same email thread. Interested people get 3 free time slots to click.</div></div>
+    <div class="step"><div class="k">Step 6 · You</div><div class="t">Join the meeting</div><div class="d">The booking lands in Google Calendar with a Google Meet link, a briefing ("dossier") and a row in the Google Sheet.</div></div>
+  </div>
+  <div class="tip"><b>Email only</b>The system only uses email. It never calls, texts or messages anyone on WhatsApp.</div>
+  <h3>Where things happen</h3>
+  <table>
+    <tr><th>Part</th><th>What it does for you</th></tr>
+    <tr><td>This dashboard</td><td>Your control room: launch searches, read every conversation, see meetings, numbers and reports.</td></tr>
+    <tr><td>Smartlead</td><td>Sends email 1 and the follow-ups from your mailboxes and keeps them warmed up. You rarely need to open it.</td></tr>
+    <tr><td>Google Calendar</td><td>Holds your meetings with the Google Meet link. The system only offers times that are free in your calendar.</td></tr>
+    <tr><td>Google Sheet</td><td>"Scheduled Meetings": one row per meeting, for your records.</td></tr>
+  </table>
+</section>
+
+<!-- 2 + 3 -->
+<section>
+  <h2><span class="num">2</span>Signing in</h2>
+  <ol class="steps">
+    <li>Open <b>https://app.zmart.cloud</b> in any browser (computer or phone).</li>
+    <li>Enter the username and password you received.</li>
+    <li>Tick <span class="ui">Keep me signed in for 30 days</span> on your own device. Leave it unticked on a shared computer.</li>
+    <li>To leave, click <span class="ui">Sign out</span> at the bottom of the left menu (on a phone: the arrow icon at the top right).</li>
+  </ol>
+  <div class="warn"><b>Keep the password private</b>Anyone with it can see your leads and send replies. After several wrong attempts the login is blocked for 15 minutes. To change the password, ask your BrandFly contact.</div>
+
+  <h2 style="margin-top:9mm"><span class="num">3</span>Your 5-minute daily routine</h2>
+  <ol class="steps">
+    <li><b>Inbox → <span class="ui">Needs you</span>.</b> These replies need a person (for example a complaint, a billing question or something the AI should not answer alone). Answer them from the Inbox.</li>
+    <li><b>Meetings → <span class="ui">Today</span>.</b> Open each meeting to read the briefing, then click <span class="ui">Join Google Meet</span> at the time.</li>
+    <li><b>After each meeting</b> set the outcome (for example <i>Completed - Proposal Sent</i> or <i>No Show</i>) and add notes.</li>
+    <li><b>Email Analytics.</b> Check that all mailboxes show <i>Connected</i> and that bounces stay low.</li>
+    <li><b>Launch</b> a new search when you want more leads (about 20-40 at a time is a good size).</li>
+  </ol>
+  <div class="tip"><b>You do not need to answer the AI's conversations</b>Every normal reply is answered for you. You can read them all in the Inbox and step in at any time.</div>
+</section>
+
+<!-- 4 -->
+<section>
+  <h2><span class="num">4</span>The menu at a glance</h2>
+  <p>The menu is on the left (on a phone: at the bottom). The green <span class="ui">Launch</span> button is at the top right of most pages.</p>
+  <table>
+    <tr><th>Menu item</th><th>What you see there</th><th>Use it to</th></tr>
+    <tr><td>Command Center</td><td>Headline numbers: qualified leads, active sequences, positive reply rate, meetings this week, pipeline value, the outreach funnel and upcoming meetings.</td><td>See at a glance how outreach is going.</td></tr>
+    <tr><td>Inbox</td><td>Every conversation from every mailbox and campaign, with the AI's answers.</td><td>Read replies and step in when needed.</td></tr>
+    <tr><td>Meetings</td><td>Call sheet and calendar of booked meetings, each with a briefing.</td><td>Prepare, join, record outcomes and notes.</td></tr>
+    <tr><td>Lead Intelligence</td><td>All leads with pain point, score, country, industry and stage. Search and filters.</td><td>Review who was found and why.</td></tr>
+    <tr><td>Services</td><td>What you sell, its sub-services and the email campaign each one uses.</td><td>Add or change what you offer.</td></tr>
+    <tr><td>Sequence Monitor</td><td>Each lead's 4-email sequence and where it stands.</td><td>Read the emails, pause or resume follow-ups.</td></tr>
+    <tr><td>Email Analytics</td><td>Emails sent, replies, bounces, campaigns and mailbox health.</td><td>Check performance and deliverability.</td></tr>
+    <tr><td>Weekly Reports</td><td>A ready weekly summary with a shareable link.</td><td>Share results with your team or clients.</td></tr>
+    <tr><td>Settings</td><td>AI reply prompt and starting price, brand and logo, meeting alerts.</td><td>Adjust how the AI talks and who gets meeting emails.</td></tr>
+  </table>
+  <div class="note"><b>Live updates</b>Pages refresh on their own when something happens (a reply, a booking). A small "Live" badge at the top shows the connection.</div>
+</section>
+
+<!-- 5 -->
+<section class="tight">
+  <h2><span class="num">5</span>Launching a campaign</h2>
+  <p class="lead">Click the green <span class="ui">Launch</span> button. A panel opens with the search on the left and a summary with the cost estimate on the right.</p>
+
+  <h3>The quick way: describe it in one sentence</h3>
+  <ol class="steps">
+    <li>Type what you want, for example: <i>"Find 40 founders of jewellery stores in Dubai and London"</i>.</li>
+    <li>Click <span class="ui">Fill with AI</span>. The AI fills in place, industry, roles, size and number of leads.</li>
+    <li>Check the fields it changed (they are listed under the sentence), adjust anything, then click <span class="ui">Launch campaign</span>.</li>
+  </ol>
+
+  <h3>The detailed way: set the filters yourself</h3>
+  <table class="compact">
+    <tr><th>Field</th><th>What to choose</th></tr>
+    <tr><td>Lead source</td><td><b>AI Ark</b> (verified emails) or <b>Apify</b> (lower cost). Your choice is remembered.</td></tr>
+    <tr><td>What you sell</td><td>A service line and, if you like, one specific sub-service. Use <i>Add a specific service</i> to add a new one on the spot.</td></tr>
+    <tr><td>Email campaign</td><td>Chosen automatically from the service. Change it only if you want a different campaign.</td></tr>
+    <tr><td>Places</td><td>Countries, cities or regions. Start typing to pick from the list.</td></tr>
+    <tr><td>Industries</td><td>Pick from the list or type your own (for example "Jewellery").</td></tr>
+    <tr><td>Decision makers</td><td>Roles such as Founder, CEO, Owner, Managing Director. You can add extra job titles and titles to skip.</td></tr>
+    <tr><td>Company size</td><td>Number of employees. Smaller companies usually answer more.</td></tr>
+    <tr><td>Revenue</td><td>Keep the default range, or switch on <i>Any revenue</i> to widen the search.</td></tr>
+    <tr><td>Email type</td><td><b>Work emails only</b> is recommended for deliverability.</td></tr>
+    <tr><td>Per company / How many</td><td>Maximum people per company (2 is a good default) and the total number of leads.</td></tr>
+    <tr><td>More filters</td><td>Optional keyword, for example "Shopify".</td></tr>
+  </table>
+  <div class="tip"><b>Save as default</b>Set the filters you use most, then click <span class="ui">Save as default</span> at the bottom. Launch opens with them every time. <span class="ui">Reset</span> brings them back.</div>
+
+  <h3>What happens after you click Launch</h3>
+  <ul>
+    <li>Leads appear in <b>Lead Intelligence</b> within a few minutes, each with its pain point and score.</li>
+    <li>Each lead gets 4 personal emails and is added to the email campaign.</li>
+    <li>Emails are sent within each mailbox's daily limit, so a large batch goes out over several days.</li>
+    <li>Not every person found is used: leads without a verified work email, outside your filters or not a decision maker are skipped.</li>
+    <li>The right-hand panel shows the <b>estimated cost</b> before you launch.</li>
+  </ul>
+  
+</section>
+
+<!-- 6 -->
+<section>
+  <h2><span class="num">6</span>Replies and the AI</h2>
+  <p class="lead">When a prospect replies, follow-ups stop and the AI takes over the conversation in the same email thread, usually within 20-30 seconds.</p>
+  <table>
+    <tr><th>The prospect writes</th><th>What the AI does</th></tr>
+    <tr><td>"Interested" / "Let's talk"</td><td>Thanks them and offers <b>3 time buttons</b> taken from your free calendar times, plus a link to pick another time.</td></tr>
+    <tr><td>A question (services, price, process)</td><td>Answers using your company information and reply prompt, then asks about their needs.</td></tr>
+    <tr><td>Accepts a time in words</td><td>Books that time if it is still free and confirms it.</td></tr>
+    <tr><td>"Not interested" / "Remove me"</td><td>Stops all emails to that person. No further contact.</td></tr>
+    <tr><td>An out-of-office reply</td><td>Does not answer; the conversation stays open.</td></tr>
+    <tr><td>A complaint, billing, legal or unusual request</td><td>Does <b>not</b> answer alone. The conversation is marked <b>Needs you</b> in the Inbox.</td></tr>
+  </table>
+  <h3>How times are chosen</h3>
+  <ul>
+    <li>Only times that are free in <b>both</b> your booking calendar and your Google Calendar are offered, so meetings never overlap.</li>
+    <li>Times are shown in the prospect's own time zone and only between 8:00 and 18:00 there.</li>
+    <li>When the prospect clicks a time, the calendar is checked again before booking. If it was taken in the meantime, they are asked to pick another.</li>
+  </ul>
+  <div class="tip"><b>The AI follows your instructions</b>What the AI says and the starting price it may mention are set in <b>Settings → AI reply prompt</b> (see section 12).</div>
+</section>
+
+<!-- 7 -->
+<section>
+  <h2><span class="num">7</span>The Inbox</h2>
+  <p class="lead">Your main inbox for all prospects. The list is on the left, the conversation on the right.</p>
+  <div class="two">
+    <div>
+      <h3>Finding a conversation</h3>
+      <ul>
+        <li><span class="ui">Replied</span>: everyone who answered.</li>
+        <li><span class="ui">Needs you</span>: replies a person should answer.</li>
+        <li><span class="ui">Interested</span>: people who want a meeting or booked one.</li>
+        <li><span class="ui">All</span>: everyone who was emailed.</li>
+        <li>Use the search box (name, email, company) and the campaign filter.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Reading a conversation</h3>
+      <ul>
+        <li>Messages show as a chat. Labels: <b>Email 1-4</b> (sequence), <b>Reply</b> (the prospect), <b>AI reply</b>, <b>You</b>.</li>
+        <li><span class="ui">Show more</span> opens long emails; <span class="ui">View email</span> shows the original design.</li>
+        <li>New messages appear on their own.</li>
+      </ul>
+    </div>
+  </div>
+  <h3>Answering yourself</h3>
+  <ol class="steps">
+    <li>Open the conversation and click the bar <span class="ui">Write a reply yourself</span> at the bottom.</li>
+    <li>Write your message. A greeting and your signature are filled in for you.</li>
+    <li>Click <span class="ui">Send</span>, then click again to confirm. It goes out from the same mailbox, in the same thread.</li>
+  </ol>
+  <div class="warn"><b>Use this Inbox, not Smartlead's</b>Answers go out straight from your mailbox so they arrive fast. That is why Smartlead's own inbox does not show the AI's answers. This Inbox always shows the whole conversation. Copies are also saved in each mailbox's <i>Sent</i> folder.</div>
+</section>
+
+<!-- 8 -->
+<section>
+  <h2><span class="num">8</span>Meetings</h2>
+  <h3>When a meeting is booked, you get</h3>
+  <ul>
+    <li>A <b>Google Calendar</b> event with a <b>Google Meet</b> link; the prospect gets the invite too.</li>
+    <li>A confirmation email to the prospect in the same thread.</li>
+    <li>A row in the Google Sheet <b>"Scheduled Meetings"</b>.</li>
+    <li>The meeting on the <b>Meetings</b> page, with a briefing.</li>
+  </ul>
+  <h3>Using the Meetings page</h3>
+  <ol class="steps">
+    <li>Choose <span class="ui">Upcoming</span>, <span class="ui">Today</span>, <span class="ui">This week</span>, <span class="ui">Past</span> or <span class="ui">All</span>, and switch between the call sheet and the <span class="ui">Calendar</span> view.</li>
+    <li>Click a meeting to open its <b>briefing</b>: the company, the pain point found on their website, suggested discovery questions, talking points and the email conversation.</li>
+    <li>At the time, click <span class="ui">Join Google Meet</span>.</li>
+    <li>Afterwards set the <b>outcome</b>: Scheduled, Completed - Proposal Sent, Closed Won, No Show, Rescheduled or Cancelled.</li>
+    <li>Type <b>notes</b> in the notes box. They save automatically and are copied to the Google Sheet.</li>
+  </ol>
+  <h3>Meeting emails in Gmail</h3>
+  <p>In <b>Settings → Meeting alerts</b>, add the people who should get meeting emails (for example the sales team). The page also explains how to switch on Google Calendar's <i>Daily agenda</i> email, so each morning's meetings arrive in Gmail with their Meet links.</p>
+  <div class="note"><b>Reschedule or cancel</b>If a prospect reschedules or cancels using their invite, the calendar, the Sheet and the Meetings page update automatically.</div>
+</section>
+
+<!-- 9 + 10 -->
+<section>
+  <h2><span class="num">9</span>Leads and follow-ups</h2>
+  <ul>
+    <li><b>Lead Intelligence</b> lists every lead with its pain point, score (80 and above is high priority), stage and the recommended service. Use the filters and search to narrow the list.</li>
+    <li><b>Sequence Monitor</b> shows each lead's 4 emails, which ones were sent and whether they replied. Use <span class="ui">Pause follow-ups</span> to stop emailing someone (for example if you already spoke to them) and <span class="ui">Resume follow-ups</span> to continue.</li>
+    <li>Follow-ups stop on their own when someone replies, unsubscribes or the email bounces.</li>
+  </ul>
+
+  <h2 style="margin-top:9mm"><span class="num">10</span>Email Analytics</h2>
+  <p>Choose <span class="ui">7 days</span>, <span class="ui">30 days</span> or <span class="ui">90 days</span> at the top right.</p>
+  <table>
+    <tr><th>Block</th><th>What it tells you</th></tr>
+    <tr><td>Top numbers</td><td>Emails sent, replies and reply rate, interested replies, meetings booked, bounces and unsubscribes.</td></tr>
+    <tr><td>Leads row</td><td>Leads uploaded, contacted, waiting to start, still in the sequence, finished, and mailboxes connected.</td></tr>
+    <tr><td>Day by day</td><td>A chart of sent, replied and bounced emails per day.</td></tr>
+    <tr><td>Replies by intent</td><td>How replies were read (interested, question, not interested, out of office) and how many the AI or you answered.</td></tr>
+    <tr><td>Campaigns</td><td>Each email campaign: status, leads, sent, replies, reply rate, bounces.</td></tr>
+    <tr><td>Sending mailboxes</td><td>Each mailbox: connected or not, emails sent today against its daily limit, warm-up and reputation.</td></tr>
+  </table>
+  <div class="note"><b>Open and click tracking is off on purpose</b>Tracking pixels and rewritten links push emails into spam. Replies and meetings are the numbers that matter.</div>
+</section>
+
+<!-- 11 + 12 -->
+<section>
+  <h2><span class="num">11</span>Exporting data</h2>
+  <p>Click <span class="ui">Export</span> at the top of Command Center, Inbox, Leads, Meetings, Sequence Monitor or Email Analytics.</p>
+  <ol class="steps">
+    <li><b>What:</b> Leads, Email activity or Meetings.</li>
+    <li><b>Which:</b> for leads: all, emailed, replied, interested, meeting booked or not emailed yet. For email activity: last 7, 30, 90 days or all time. For meetings: upcoming, past or all.</li>
+    <li><b>Download as:</b> <b>CSV</b> (opens in Excel or Google Sheets), <b>PDF</b> (to share or print) or <b>Markdown</b> (for documents or Notion).</li>
+  </ol>
+  <p class="muted">Lead exports include name, email, role, company, website, LinkedIn, country, industry, what the company does, pain point, recommended service, score, stage, reply and meeting. Email activity lists every email sent, every reply and every answer with its text.</p>
+
+  <h2 style="margin-top:9mm"><span class="num">12</span>Settings and services</h2>
+  <h3>Settings → AI reply prompt</h3>
+  <p>The instructions the AI follows when it answers prospects (who you are, your services, tone, what not to say) and the <b>starting price</b> it may mention. Edit the parts, check the <i>Live preview</i> of what a prospect would read, then save. You can always go back to the built-in version.</p>
+  <div class="warn"><b>Change it carefully</b>The prompt affects every future reply. Change one thing at a time and read the preview before saving.</div>
+  <h3>Settings → Brand &amp; logo</h3>
+  <p>Upload your logo and set the dashboard name. They appear in the menu, on the login page and in the browser tab.</p>
+  <h3>Settings → Meeting alerts</h3>
+  <p>Email addresses that receive meeting notifications, plus the steps to get Google Calendar's daily agenda by email.</p>
+  <h3>Services</h3>
+  <p>Add a service line, its sub-services and the signals to look for, and choose which email campaign it uses. New sub-services show up in Launch straight away.</p>
+  <h3>Weekly Reports</h3>
+  <p>Click <span class="ui">Generate Weekly Client Report</span>. You get a shareable link; open it and use <i>Save as PDF</i> to keep a copy.</p>
+</section>
+
+<!-- 13 -->
+<section>
+  <h2><span class="num">13</span>Mailboxes and good practice</h2>
+  <ul>
+    <li><b>Warm-up first.</b> New mailboxes need <b>2-3 weeks of warm-up</b> before real campaigns. Keep warm-up switched on in Smartlead all the time.</li>
+    <li><b>Daily limits.</b> Each mailbox sends a limited number of emails per day (about 20 while warming). To send more, add more mailboxes rather than raising the limit.</li>
+    <li><b>Adding a mailbox.</b> Connect it in Smartlead, then ask your BrandFly contact to link it to the system, so its replies are answered within seconds too.</li>
+    <li><b>Starting a campaign.</b> Each email campaign is switched on once in Smartlead (with its mailboxes attached). After that, new leads you launch are sent automatically.</li>
+    <li><b>Keep Smartlead's own AI auto-reply OFF.</b> This system answers replies; two systems answering would confuse prospects.</li>
+    <li><b>Watch bounces.</b> If bounces go above about 3%, pause and check the lead filters (prefer verified work emails).</li>
+    <li><b>Keep Smartlead paid.</b> Emails stop if the Smartlead subscription ends.</li>
+    <li><b>Start small.</b> Launch 20-40 leads, read the first replies, then scale up.</li>
+  </ul>
+  <div class="tip"><b>Why the emails look simple</b>The email design has no images and no tracking, so it reaches the inbox instead of spam and looks like a personal note with one booking button.</div>
+</section>
+
+<!-- 14 -->
+<section>
+  <h2><span class="num">14</span>Questions and fixes</h2>
+  <div class="faq"><div class="q">A reply is not in the Inbox yet.</div><div>Wait a minute or click the refresh icon. Make sure you are on https://app.zmart.cloud. A reply from a different address than the one we emailed (for example a colleague) is shown as an alert so a person answers it.</div></div>
+  <div class="faq"><div class="q">The AI did not answer a reply.</div><div>Open <b>Inbox → Needs you</b>. Replies about complaints, billing, legal topics or prices outside the approved starting price are left for a person on purpose.</div></div>
+  <div class="faq"><div class="q">A search found very few leads.</div><div>Widen the search: more places, industries or roles, a bigger company size range, <i>Any revenue</i>, or allow personal emails. Very narrow niches simply have fewer verified decision makers.</div></div>
+  <div class="faq"><div class="q">Emails land in spam.</div><div>Give mailboxes more warm-up time, keep daily volumes low and ask early recipients to mark emails as "Not spam". Avoid adding links or images to the emails.</div></div>
+  <div class="faq"><div class="q">A prospect says the time button did not work.</div><div>The slot was probably taken in the meantime; they see a message to pick another time or use the booking link.</div></div>
+  <div class="faq"><div class="q">I want to change what the AI says about prices.</div><div>Settings → AI reply prompt → <i>Starting price</i>. The AI never quotes any other amount on its own; such replies go to <i>Needs you</i>.</div></div>
+  <div class="faq"><div class="q">I forgot the password or need another login.</div><div>Contact your BrandFly contact.</div></div>
+  <div class="note" style="margin-top:8mm"><b>Need help?</b>Contact your BrandFly account manager with a short description and, if possible, a screenshot.</div>
+</section>
+
+</body>
+</html>
