@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/page-header";
+import { ExportMenu } from "@/components/export-menu";
 import { LiveRefresh } from "@/components/live-refresh";
 import { LeadsExplorer } from "@/components/leads/leads-explorer";
 import { getLeadsData } from "@/lib/queries";
@@ -39,7 +40,12 @@ export default async function LeadsPage() {
       <PageHeader
         title="Lead & Pain-Point Intelligence"
         description="Every lead is ICP-filtered (US/UK/EU/UAE · $100k–$10M revenue), email-verified and audited for a real hook before a single email is sent."
-        actions={<LiveRefresh />}
+        actions={
+          <>
+            <ExportMenu dataset="leads" />
+            <LiveRefresh />
+          </>
+        }
       />
       <LeadsExplorer leads={rows} />
     </>

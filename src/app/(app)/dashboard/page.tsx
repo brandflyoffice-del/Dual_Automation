@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ExportMenu } from "@/components/export-menu";
 import { CalendarCheck2, DollarSign, Mail, MessageSquareReply, Target, TrendingUp } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
@@ -52,6 +53,7 @@ export default async function DashboardPage() {
         description="Email-only outreach for BrandFly. Qualified leads in, meetings on the calendar."
         actions={
           <>
+            <ExportMenu dataset="leads" />
             <LaunchCampaign className="hidden lg:inline-flex" />
             <LiveRefresh />
           </>

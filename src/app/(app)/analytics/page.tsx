@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ExportMenu } from "@/components/export-menu";
 import { AlertTriangle, Bot, CalendarCheck2, CheckCircle2, Hourglass, Inbox, MailCheck, MailX, MessageSquareReply, Send, UserMinus, Users } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -108,6 +109,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                 </Link>
               ))}
             </div>
+            <ExportMenu dataset="emails" />
             <LiveRefresh />
           </>
         }

@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/page-header";
+import { ExportMenu } from "@/components/export-menu";
 import { LiveRefresh } from "@/components/live-refresh";
 import { MeetingsHub } from "@/components/meetings/meetings-hub";
 import { getMeetingsData } from "@/lib/queries";
@@ -66,7 +67,12 @@ export default async function MeetingsPage({ searchParams }: { searchParams: Pro
       <PageHeader
         title="Meetings"
         description="Open the row, join the Google Meet, read the brief. Every row is a qualified ($1k+) meeting booked by email."
-        actions={<LiveRefresh />}
+        actions={
+          <>
+            <ExportMenu dataset="meetings" />
+            <LiveRefresh />
+          </>
+        }
       />
       <MeetingsHub meetings={rows} sheetUrl={config.sheetUrl} calendarUrl={config.calendarUrl} openId={open} />
     </>
