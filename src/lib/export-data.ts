@@ -15,6 +15,7 @@ const when = (d: Date | null | undefined) =>
   d ? d.toLocaleString("en-GB", { timeZone: IST, day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) + " IST" : "";
 const campaignName = (id: string | null) => (id ? (OUTREACH_CAMPAIGNS.find((c) => c.id === id)?.name ?? id) : "");
 const label = <T extends string>(map: Record<string, string>, v: T | null | undefined) => (v ? (map[v] ?? v) : "");
+const n = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 const today = () => new Date().toLocaleDateString("en-GB", { timeZone: IST, day: "2-digit", month: "short", year: "numeric" });
 
 const LEAD_SCOPE_TITLE: Record<string, string> = {
@@ -46,7 +47,7 @@ async function leads(scope: string): Promise<ExportTable> {
   });
   return {
     title: `BrandFly · ${LEAD_SCOPE_TITLE[scope] ?? "Leads"}`,
-    subtitle: `${rows.length} leads · exported ${today()}`,
+    subtitle: `${n(rows.length, "lead")} · exported ${today()}`,
     columns: [
       { key: "name", label: "Name" },
       { key: "email", label: "Email" },
@@ -127,7 +128,7 @@ async function emails(scope: string): Promise<ExportTable> {
   });
   return {
     title: "BrandFly · Email activity",
-    subtitle: `${rows.length} emails ${since ? `in the last ${days} days` : "(all time)"} · sent, replies and answers · exported ${today()}`,
+    subtitle: `${n(rows.length, "email")} ${since ? `in the last ${days} days` : "(all time)"} · sent, replies and answers · exported ${today()}`,
     columns: [
       { key: "at", label: "When" },
       { key: "what", label: "What" },
@@ -163,7 +164,7 @@ async function meetings(scope: string): Promise<ExportTable> {
   });
   return {
     title: `BrandFly · ${scope === "upcoming" ? "Upcoming meetings" : scope === "past" ? "Past meetings" : "All meetings"}`,
-    subtitle: `${rows.length} meetings · times in IST · exported ${today()}`,
+    subtitle: `${n(rows.length, "meeting")} · times in IST · exported ${today()}`,
     columns: [
       { key: "at", label: "When (IST)" },
       { key: "name", label: "Prospect" },
