@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Building2, Check, ChevronDown, Info, Loader2, MapPin, Plus, Rocket, RotateCcw, Sparkles, Target, Users, Wand2 } from "lucide-react";
+import { Building2, Check, ChevronDown, Info, Loader2, MapPin, Plus, Rocket, RotateCcw, Save, Sparkles, Target, Users, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -140,6 +140,30 @@ function Segmented<T extends string | number>({ value, options, onChange }: { va
 
 function toggle(list: string[], id: string) {
   return list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
+}
+
+/** The user's own starting filters ("Save as default"), kept in this browser. Falls back to the built-in defaults. */
+type LaunchDefaults = {
+  lineId: string;
+  places: PlacePick[];
+  core: string[];
+  custom: string[];
+  roles: string[];
+  employees: string[];
+  anyRevenue: boolean;
+  emailType: "work" | "any";
+  maxPerCompany: number;
+  limit: number;
+};
+const DEFAULTS_KEY = "fenebris.launchDefaults";
+function savedDefaults(): Partial<LaunchDefaults> {
+  try {
+    const raw = window.localStorage.getItem(DEFAULTS_KEY);
+    const v = raw ? (JSON.parse(raw) as Partial<LaunchDefaults>) : {};
+    return v && typeof v === "object" ? v : {};
+  } catch {
+    return {};
+  }
 }
 
 export function LaunchCampaign({ className, compact = false }: { className?: string; compact?: boolean }) {
@@ -334,29 +358,54 @@ export function LaunchCampaign({ className, compact = false }: { className?: str
     }
   }
 
+  /** Built-in defaults, overridden by whatever the user saved with "Save as default". */
+  function applyDefaults() {
+    const d = savedDefaults();
+    const arr = <T,>(v: T[] | undefined, fallback: T[]) => (Array.isArray(v) && v.length ? v : fallback);
+    setLineId(typeof d.lineId === "string" ? d.lineId : "AUTO");
+    setSub("ANY");
+    setNewSub(null);
+    setCampaignLock(false);
+    setPlaces(arr(d.places, DEFAULT_PLACES));
+    setCore(Array.isArray(d.core) ? d.core : CORE);
+    setCustom(Array.isArray(d.custom) ? d.custom : []);
+    setRoles(arr(d.roles, PRESET_ROLES));
+    setRolesTouched(Array.isArray(d.roles) && d.roles.length > 0);
+    setEmployees(arr(d.employees, DEFAULT_EMPLOYEE_RANGES));
+    setAnyRevenue(d.anyRevenue === true);
+    setEmailType(d.emailType === "any" ? "any" : "work");
+    setMaxPerCompany(Number.isFinite(d.maxPerCompany) && d.maxPerCompany! >= 1 ? d.maxPerCompany! : 2);
+    setLimit(Number.isFinite(d.limit) && d.limit! >= 1 ? d.limit! : 40);
+  }
+
+  function saveDefaults() {
+    const d: LaunchDefaults = { lineId, places, core, custom, roles, employees, anyRevenue, emailType, maxPerCompany, limit };
+    try {
+      window.localStorage.setItem(DEFAULTS_KEY, JSON.stringify(d));
+      toast.success("Saved as your default", { description: "Launch opens with these filters next time. Reset brings them back." });
+    } catch {
+      toast.error("Could not save in this browser");
+    }
+  }
+
   function reset() {
     setSentence("");
     setFilledFrom("");
     setFill(null);
     setName("");
-    setLineId("AUTO");
-    setSub("ANY");
-    setNewSub(null);
-    setCampaignLock(false);
-    setPlaces(DEFAULT_PLACES);
-    setCore(CORE);
-    setCustom([]);
-    setRoles(PRESET_ROLES);
-    setRolesTouched(false);
     setExtraTitles("");
     setExcludeNote("");
-    setEmployees(DEFAULT_EMPLOYEE_RANGES);
-    setAnyRevenue(false);
-    setEmailType("work");
-    setMaxPerCompany(2);
-    setLimit(40);
     setKeyword("");
+    applyDefaults();
   }
+
+  // Open with the saved defaults; with nothing saved, lead with the first service line instead of "not chosen".
+  useEffect(() => {
+    if (open && !filledFrom && !name) applyDefaults();
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (open && lines.length && lineId === "AUTO" && savedDefaults().lineId === undefined) chooseLine(lines[0].id);
+  }, [open, lines]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const summary = useMemo(() => {
     const where = places.map(placeLabel);
@@ -890,6 +939,9 @@ export function LaunchCampaign({ className, compact = false }: { className?: str
           <span className="text-center text-[12px] text-muted-foreground sm:mr-auto sm:text-left">
             {limit} leads via {provider === "apify" ? "Apify" : "AI Ark"} · est. <span className="font-metric font-semibold text-foreground">{costLabel(provider, limit)}</span>
           </span>
+          <Button type="button" variant="ghost" onClick={saveDefaults} disabled={busy} title="Open Launch with these filters every time">
+            <Save /> Save as default
+          </Button>
           <Button type="button" variant="secondary" onClick={reset} disabled={busy}>
             <RotateCcw /> Reset
           </Button>

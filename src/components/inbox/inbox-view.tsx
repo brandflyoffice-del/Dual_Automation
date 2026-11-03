@@ -207,14 +207,33 @@ export function InboxView() {
     setThread({ key: c.key, messages: j?.messages ?? [], canReply: !!j?.canReply, error: r?.ok ? undefined : j?.error || "Could not load this thread" });
   }, []);
 
+  // Live: n8n pushes an event the moment a reply or an answer is recorded (SSE), so the list and the open chat reload
+  // straight away. A 20 s poll covers a dropped connection.
+  const openRef = useRef<InboxConversation | null>(null);
   useEffect(() => {
     load();
-    const t = setInterval(load, 30_000);
-    return () => clearInterval(t);
-  }, [load]);
+    const refresh = () => {
+      load();
+      if (openRef.current) loadThread(openRef.current);
+    };
+    const t = setInterval(refresh, 20_000);
+    let es: EventSource | null = null;
+    try {
+      es = new EventSource("/api/events");
+      es.onmessage = () => setTimeout(refresh, 600);
+    } catch {}
+    return () => {
+      clearInterval(t);
+      es?.close();
+    };
+  }, [load, loadThread]);
 
+  const seenCount = useRef<{ key: string; n: number }>({ key: "", n: 0 });
   useEffect(() => {
-    bottom.current?.scrollIntoView({ block: "end" });
+    if (!thread) return;
+    const n = thread.messages.length;
+    if (seenCount.current.key !== thread.key || n > seenCount.current.n) bottom.current?.scrollIntoView({ block: "end" });
+    seenCount.current = { key: thread.key, n };
   }, [thread]);
 
   const campaigns = useMemo(() => {
@@ -236,6 +255,7 @@ export function InboxView() {
     );
   }, [list, filter, campaign, q]);
   const current = (list ?? []).find((c) => c.key === selected) ?? null;
+  openRef.current = current;
 
   function open(c: InboxConversation) {
     setSelected(c.key);

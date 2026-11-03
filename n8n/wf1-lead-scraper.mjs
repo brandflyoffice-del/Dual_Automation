@@ -301,6 +301,7 @@ const pushLead = (lead) => {
     country: lead.country, region: region || 'OTHER', industry,
     employeeCount: employees || null, annualRevenue: annual || null, sourceId: lead.sourceId || null,
     leadSource: ctx.provider || 'ai-ark',
+    headline: String(lead.headline || '').slice(0, 200), companyAbout: String(lead.about || '').replace(/\s+/g, ' ').slice(0, 600),
     preverified: true, emailStatus: 'VALID',
   } });
 };
@@ -323,6 +324,7 @@ for (const it of $input.all()) {
       email, firstName: a.firstName || '', lastName: a.lastName || '', role: a.jobTitle || a.primaryTitle || '',
       linkedinUrl: a.linkedinUrl || null, companyName: a.companyName || '', domain: a.companyDomain || '',
       country, employeeCount: staffCount(a.companySize), annualRevenue: 0, sourceId: a.personId || null,
+      headline: a.headline || '', about: a.companyDescription || a.companyAbout || '',
       hay: [a.companyIndustry, a.headline, a.companyName, a.jobTitle].join(' '),
     });
     continue;
@@ -345,6 +347,7 @@ for (const it of $input.all()) {
     employeeCount: Number(staff.total || (staff.range && staff.range.start) || 0),
     annualRevenue: revObj ? Number(revObj.amount || revObj.start || 0) : 0,
     sourceId: m.id || null,
+    headline: profile.headline || '', about: summary.description || summary.overview || company.description || '',
     hay: [summary.industry, (company.industries || []).join(' '), (company.keywords || []).join(' '), summary.name, profile.headline].join(' '),
   });
 }
@@ -473,6 +476,16 @@ $input.all().forEach((it, i) => {
   const title = (html.match(/<title[^>]*>([^<]*)<\/title>/i) || [])[1] || '';
   const metaDesc = /<meta[^>]+name=["']description["'][^>]+content=["'][^"']{20,}/i.test(html);
   const viewport = /<meta[^>]+name=["']viewport["']/i.test(html);
+  // What the company says about itself: meta / og description, top headings and the first visible text of the home page.
+  const attr = (re) => ((html.match(re) || [])[1] || '').trim();
+  const decode = (t) => t.replace(/&amp;/g, '&').replace(/&#0?39;|&apos;|&rsquo;/g, "'").replace(/&quot;/g, '"').replace(/&nbsp;/g, ' ').replace(/&[a-z#0-9]+;/gi, ' ');
+  const describe = decode(attr(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']{10,400})/i)
+    || attr(/<meta[^>]+content=["']([^"']{10,400})["'][^>]+name=["']description/i)
+    || attr(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']{10,400})/i));
+  const body = decode(html.replace(/<(script|style|noscript|svg|nav|footer)[\s\S]*?<\/\1>/gi, ' ').replace(/<!--[\s\S]*?-->/g, ' '));
+  const headings = [...body.matchAll(/<h[1-2][^>]*>([\s\S]*?)<\/h[1-2]>/gi)].map(m => m[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()).filter(t => t.length > 3 && t.length < 160).slice(0, 6);
+  const visible = body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 900);
+  const siteText = [describe, headings.join(' | '), visible].filter(Boolean).join('\n').slice(0, 1400);
   const security = {
     hsts: !!hdr['strict-transport-security'],
     csp: !!hdr['content-security-policy'],
@@ -500,6 +513,7 @@ $input.all().forEach((it, i) => {
     domain: lead.companyDomain, reachable, pageSpeedMobile: perf, lcpSeconds: lcp, totalBlockingTimeMs: tbt,
     hasMetaPixel, hasGa4, hasGtm, https: /^https:/i.test(lead.companyWebsite), securityHeaders: security,
     techStack: stack, metaDescriptionPresent: metaDesc, mobileViewport: viewport, title: title.trim().slice(0, 120),
+    siteDescription: describe.slice(0, 300), siteText,
     verifiedHooks: hooks, auditedAt: new Date().toISOString(),
   } } });
 });
@@ -521,7 +535,8 @@ return $input.all().map(it => {
   const l = it.json;
   const user =
     '<prospect>' + JSON.stringify({ first_name: l.firstName, role: l.role, company: l.companyName, website: l.companyWebsite, country: l.country, region: l.region,
-      industry: l.industry, employees: l.employeeCount, annual_revenue_usd: l.annualRevenue }) + '</prospect>\n' +
+      industry: l.industry, employees: l.employeeCount, annual_revenue_usd: l.annualRevenue, headline: l.headline || null, company_about: l.companyAbout || null }) + '</prospect>\n' +
+    '<website_text>\n' + (l.auditFindings.siteText || l.auditFindings.title || '(not available)') + '\n</website_text>\n' +
     '<audit>' + JSON.stringify({ verified_hooks: l.auditFindings.verifiedHooks, site_reachable: l.auditFindings.reachable ? true : 'unknown',
       mobile_pagespeed: l.auditFindings.pageSpeedMobile, lcp_seconds: l.auditFindings.lcpSeconds, tech_stack: l.auditFindings.techStack }) + '</audit>\n' +
     '<case_studies>' + (($env.CASE_STUDIES) || '') + '</case_studies>\n' +
