@@ -68,6 +68,9 @@ services:
       GOOGLE_CALENDAR_URL: ${GOOGLE_CALENDAR_URL:-}
       BOOKING_LINK: ${BOOKING_LINK:-}
       TZ: ${TZ:-Asia/Kolkata}
+      # Dashboard login page (src/app/login); the session cookie is signed with WEBHOOK_SECRET.
+      DASH_USER: ${DASH_USER}
+      DASH_PASSWORD: ${DASH_PASSWORD}
     volumes:
       # Launch "Fill with AI" reads OPENAI_API_KEY / OPENAI_MODEL from here (same file the workflow is baked from).
       - ./n8n-config.json:/app/n8n/config.local.json:ro

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, CalendarCheck2, FileBarChart2, Mail, Radar, Layers, Settings } from "lucide-react";
+import { BarChart3, CalendarCheck2, FileBarChart2, LogOut, Mail, Radar, Layers, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SystemStatus } from "@/components/system-status";
 import { LaunchCampaign } from "@/components/launch-campaign";
@@ -20,6 +20,12 @@ const NAV = [
 /** Logo from Settings (or the built-in one). `v` changes when the logo is saved, so the browser fetches the new file. */
 type BrandProps = { brandName: string; logoVersion: string };
 const logoSrc = (v: string) => `/api/brand/logo?v=${encodeURIComponent(v)}`;
+
+async function signOut() {
+  await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+  window.location.assign("/login");
+}
+
 
 export function Sidebar({ brandName, logoVersion }: BrandProps) {
   const pathname = usePathname();
@@ -50,6 +56,14 @@ export function Sidebar({ brandName, logoVersion }: BrandProps) {
         })}
       </nav>
       <SystemStatus />
+      <button
+        type="button"
+        onClick={signOut}
+        className="mt-2 flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] text-muted-foreground transition-colors hover:bg-foreground/[0.05] hover:text-foreground"
+      >
+        <LogOut className="size-4" />
+        Sign out
+      </button>
     </aside>
   );
 }
@@ -61,7 +75,12 @@ export function MobileNav({ brandName, logoVersion }: BrandProps) {
       <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-border bg-card/95 px-3 py-2 backdrop-blur lg:hidden">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={logoSrc(logoVersion)} alt={brandName} className="h-8 w-auto max-w-40 object-contain" />
-        <LaunchCampaign compact />
+        <div className="flex items-center gap-1.5">
+          <LaunchCampaign compact />
+          <button type="button" onClick={signOut} aria-label="Sign out" className="rounded-md p-2 text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground">
+            <LogOut className="size-4" />
+          </button>
+        </div>
       </header>
       <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-7 border-t border-border bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
         {NAV.map(({ href, short, icon: Icon }) => {

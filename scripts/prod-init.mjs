@@ -76,7 +76,7 @@ const cfg = {
 writeFileSync(join(out, "n8n-config.json"), JSON.stringify(cfg, null, 2));
 writeFileSync(
   join(out, "dashboard-login.txt"),
-  `Dashboard  https://${appDomain}\nuser       ${env.DASH_USER}\npassword   ${env.DASH_PASSWORD}\n(HTTP basic auth in front of the dashboard. Keep this file private.)\n`,
+  `Dashboard  https://${appDomain}\nuser       ${env.DASH_USER}\npassword   ${env.DASH_PASSWORD}\n(Dashboard login page. Keep this file private.)\n`,
 );
 
 console.log(`Wrote deploy/.local/{env.prod, n8n-config.json, dashboard-login.txt, target.json}`);

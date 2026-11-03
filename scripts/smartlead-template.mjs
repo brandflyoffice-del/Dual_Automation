@@ -16,6 +16,8 @@ const cfg = JSON.parse(readFileSync("deploy/.local/n8n-config.json", "utf8"));
 const KEY = encodeURIComponent(cfg.SMARTLEAD_API_KEY);
 const BOOKING = cfg.BOOKING_LINK || "https://cal.com/brandfly-office-ax8wq8/30min";
 const API = "https://server.smartlead.ai/api/v1";
+// Logos are served by our own dashboard (public/brand/email, no login), so they load fast and never break on a third-party site.
+const ASSETS = "https://app.zmart.cloud/brand/email";
 
 async function sl(method, path, body) {
   const r = await fetch(`${API}${path}${path.includes("?") ? "&" : "?"}api_key=${KEY}`, {
@@ -35,8 +37,8 @@ async function sl(method, path, body) {
 /** Brand per campaign: 4238487 is Expert in SEO, every other campaign is TapadiaTech. */
 export function brandFor(campaignId) {
   return String(campaignId) === "4238487"
-    ? { name: "Expert in SEO", site: "ExpertinSEO.com", url: "https://expertinseo.com", accent: "#101A56", link: "#101A56" }
-    : { name: "Tapadia Tech", site: "TapadiaTech.com", url: "https://tapadiatech.com", accent: "#FF7302", link: "#003388" };
+    ? { name: "Expert in SEO", site: "ExpertinSEO.com", url: "https://expertinseo.com", accent: "#101A56", link: "#101A56", logo: { src: `${ASSETS}/expertinseo.png`, w: 150, h: 50, bg: "#101A56" } }
+    : { name: "Tapadia Tech", site: "TapadiaTech.com", url: "https://tapadiatech.com", accent: "#FF7302", link: "#003388", logo: { src: `${ASSETS}/tapadiatech.png`, w: 140, h: 46, bg: "" } };
 }
 
 /**
@@ -52,6 +54,11 @@ export function emailHtml({ brand, content, booking = BOOKING }) {
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#ffffff;">
 <tr><td style="padding:20px 16px;">
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:560px;">
+<tr><td style="padding:0 0 22px;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td style="${brand.logo.bg ? `background:${brand.logo.bg};padding:10px 14px;border-radius:8px;` : ""}">
+<a href="${brand.url}" style="text-decoration:none;"><img src="${brand.logo.src}" width="${brand.logo.w}" height="${brand.logo.h}" alt="${brand.name}" style="display:block;width:${brand.logo.w}px;height:${brand.logo.h}px;border:0;outline:none;${font}font-size:18px;font-weight:bold;color:${brand.logo.bg ? "#ffffff" : brand.link};"></a>
+</td></tr></table>
+</td></tr>
 <tr><td style="${font}font-size:15px;line-height:1.6;color:#1f2937;">
 ${content}
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:22px 0 4px;"><tr><td style="background:${brand.accent};border-radius:6px;">

@@ -86,7 +86,9 @@ $DC restart n8n
 sleep 15
 ok=1
 curl -fsS -o /dev/null "https://$N8N_DOMAIN/healthz" && echo "n8n   https://$N8N_DOMAIN  OK" || { echo "n8n   https://$N8N_DOMAIN  FAILED"; ok=0; }
-code="$(curl -s -o /dev/null -w '%{http_code}' "https://$APP_DOMAIN/")"
-[ "$code" = "401" ] && echo "app   https://$APP_DOMAIN  OK (login required)" || { echo "app   https://$APP_DOMAIN  unexpected HTTP $code"; ok=0; }
+# Pages redirect to the login page; the API answers 401 without a session.
+code="$(curl -s -o /dev/null -w '%{http_code}' "https://$APP_DOMAIN/api/offerings")"
+login="$(curl -s -o /dev/null -w '%{http_code}' "https://$APP_DOMAIN/login")"
+[ "$code" = "401" ] && [ "$login" = "200" ] && echo "app   https://$APP_DOMAIN  OK (login page up, API needs a session)" || { echo "app   https://$APP_DOMAIN  unexpected: api $code, login $login"; ok=0; }
 docker image prune -f >/dev/null
 [ "$ok" = 1 ] && echo "DEPLOY OK" || { echo "DEPLOY FINISHED WITH FAILURES"; exit 1; }
