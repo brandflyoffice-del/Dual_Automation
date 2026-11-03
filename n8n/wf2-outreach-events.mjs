@@ -116,7 +116,8 @@ for (const it of $input.all()) {
   const from = String((((m.from || {}).value || [])[0] || {}).address || '').toLowerCase();
   if (!from || MINE.includes(from) || /^(mailer-daemon|postmaster)@/i.test(from)) continue; // our own mail, bounces (Smartlead handles those)
   const at = m.date ? new Date(m.date) : new Date();
-  if (!isFinite(at) || Date.now() - at.getTime() > 6 * 3600000) continue; // older mail seen again after a reconnect
+  // On (re)connect n8n fetches all of today's mail again; only fresh mail is new. 30 min covers a redeploy or a short outage.
+  if (!isFinite(at) || Date.now() - at.getTime() > 30 * 60000) continue;
   const refs = (String([].concat(m.references || []).join(' ') + ' ' + (m.inReplyTo || '')).match(ID) || []);
   // Only answers to our own outreach: the thread points at a message one of our mailboxes sent.
   if (!refs.some(r => DOMAINS.some(d => r.toLowerCase().endsWith('@' + d + '>')))) continue;
@@ -220,6 +221,10 @@ return [{ json: { type, event: {
 const lead = $input.first().json;
 const ev = $('Normalize Event').first().json.event;
 if (Number(lead.seen_reply || 0) > 0) return []; // duplicate delivery of a reply we already handled
+// Only the newest message gets an answer: if the prospect wrote again or we already answered after this message, it is stale
+// (for example a late Smartlead webhook, or an older email the mailbox watch picked up again).
+const evAt = new Date(ev.occurredAt || 0).getTime();
+if ((lead.conversation || []).some(c => new Date(c.at).getTime() > evAt + 1000)) return [];
 const sent = (lead.sent_emails || []).filter(e => e.step <= ev.step).pop() || {};
 const user = '<our_last_email subject="' + (sent.subject || '') + '">\n' + (sent.body || '') + '\n</our_last_email>\n<prospect_reply>\n' + (ev.body || '(empty reply)') + '\n</prospect_reply>';
 return [{ json: { classifyRequest: { model: $env.OPENAI_MODEL || 'gpt-4o', temperature: 0, response_format: { type: 'json_object' },
