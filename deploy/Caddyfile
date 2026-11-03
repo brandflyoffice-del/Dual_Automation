@@ -6,9 +6,9 @@
 	encode zstd gzip
 
 	# The dashboard has no login of its own, so the whole thing sits behind HTTP basic auth.
-	# Left open on purpose: the public report share page (/r/<token>) and its static assets.
-	@public path /r/* /_next/* /brand/* /icon.png /apple-icon.png
-	@private not path /r/* /_next/* /brand/* /icon.png /apple-icon.png
+	# Left open on purpose: the public report share page (/r/<token>), its static assets, and /privacy + /terms (linked from the Google OAuth consent screen).
+	@public path /r/* /_next/* /brand/* /icon.png /apple-icon.png /privacy /terms
+	@private not path /r/* /_next/* /brand/* /icon.png /apple-icon.png /privacy /terms
 	basic_auth @private {
 		{$DASH_USER} {$DASH_PASS_HASH}
 	}

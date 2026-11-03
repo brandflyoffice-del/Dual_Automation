@@ -35,6 +35,8 @@ $DC run --rm --no-deps dashboard npx prisma db push --skip-generate    # refuses
 
 # 4. everything up
 $DC up -d --remove-orphans
+# Caddy only reads its (bind-mounted) Caddyfile at start; pick up changes without dropping connections.
+$DC exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile || echo "caddy reload failed (old config stays active)"
 for i in $(seq 1 40); do
   [ "$($DC ps --format '{{.Health}}' n8n)" = "healthy" ] && break
   sleep 3
