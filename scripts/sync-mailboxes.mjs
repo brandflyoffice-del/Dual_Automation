@@ -17,18 +17,24 @@ const r = await fetch(`https://server.smartlead.ai/api/v1/email-accounts/?offset
 if (!r.ok) throw new Error(`Smartlead ${r.status}`);
 const rows = await r.json();
 const secure = (t) => String(t || "").toUpperCase() === "SSL";
+// Smartlead's API returns mailbox passwords base64-encoded (the raw value fails SMTP/IMAP login; the decoded one works).
+const plain = (p) => {
+  const s = String(p || "");
+  const d = Buffer.from(s, "base64").toString("utf8");
+  return /^[A-Za-z0-9+/]+={0,2}$/.test(s) && Buffer.from(d, "utf8").toString("base64").replace(/=+$/, "") === s.replace(/=+$/, "") && /^[\x21-\x7e]+$/.test(d) ? d : s;
+};
 const MAILBOXES = rows
   .filter((a) => a.from_email && a.smtp_host && a.imap_host)
   .map((a) => ({
     email: String(a.from_email).toLowerCase(),
     name: a.from_name || "",
-    smtp: { host: a.smtp_host, port: Number(a.smtp_port), secure: secure(a.smtp_port_type) || Number(a.smtp_port) === 465, user: a.username, password: a.password },
+    smtp: { host: a.smtp_host, port: Number(a.smtp_port), secure: secure(a.smtp_port_type) || Number(a.smtp_port) === 465, user: a.username, password: plain(a.password) },
     imap: {
       host: a.imap_host,
       port: Number(a.imap_port),
       secure: secure(a.imap_port_type) || Number(a.imap_port) === 993,
       user: a.is_different_imap_account ? a.imap_username : a.imap_username || a.username,
-      password: a.is_different_imap_account ? a.imap_password : a.imap_password || a.password,
+      password: plain(a.is_different_imap_account ? a.imap_password : a.imap_password || a.password),
     },
   }));
 
