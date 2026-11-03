@@ -15,6 +15,13 @@ for (const f of readdirSync(out)) if (f.endsWith(".json")) rmSync(join(out, f));
 
 export const NAME = "Fenebris_Outreach_Autopilot";
 
+const keepEnv = process.argv.includes("--env");
+const cfgPath = join(here, "config.local.json");
+const cfg = existsSync(cfgPath) ? JSON.parse(readFileSync(cfgPath, "utf8")) : {};
+// Sending mailboxes (addresses only; their IMAP logins become n8n credentials fenebrisImap01.. at deploy).
+const mailboxes = (Array.isArray(cfg.MAILBOXES) ? cfg.MAILBOXES : []).map((m) => String(m.email || "").toLowerCase()).filter(Boolean);
+
+
 const wf = mergeWorkflows(NAME, [
   {
     wf: buildWorkflow1(),
@@ -22,7 +29,7 @@ const wf = mergeWorkflows(NAME, [
     banner: "LANE 1 — LEAD ENGINE: AI Ark (verified email) → site/PageSpeed audit → AI qualification ($1k+ gate) + 4-step sequence → Smartlead → Postgres. Trigger: dashboard Launch campaign.",
   },
   {
-    wf: buildWorkflow2(),
+    wf: buildWorkflow2({ mailboxes }),
     label: "2 Replies",
     banner: "LANE 2 — REPLY BRAIN: Smartlead events → AI classifies replies → real Cal.com slots → AI drafts + auto-sends the reply → Postgres → live dashboard. Also: dashboard pause / resume / push-to-booking.",
   },
@@ -52,9 +59,6 @@ if (errors.length) {
  * from n8n/config.local.json (git-ignored) into the generated workflow. Missing values become "" and are reported.
  * Use `--env` to keep live `$env.X` references instead (requires N8N_BLOCK_ENV_ACCESS_IN_NODE=false on the server).
  */
-const keepEnv = process.argv.includes("--env");
-const cfgPath = join(here, "config.local.json");
-const cfg = existsSync(cfgPath) ? JSON.parse(readFileSync(cfgPath, "utf8")) : {};
 const missing = new Set();
 const used = new Set();
 const bake = (v) => {

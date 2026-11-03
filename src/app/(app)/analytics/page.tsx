@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, Bot, CalendarCheck2, MailCheck, MailX, MessageSquareReply, Send, UserMinus } from "lucide-react";
+import { AlertTriangle, Bot, CalendarCheck2, CheckCircle2, Hourglass, Inbox, MailCheck, MailX, MessageSquareReply, Send, UserMinus, Users } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/page-header";
@@ -82,6 +82,13 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   const positive = bySentiment.Positive_Booking_Intent ?? 0;
   const capacity = (data?.mailboxes ?? []).reduce((a, m) => a + m.dailyLimit, 0);
   const sentToday = (data?.mailboxes ?? []).reduce((a, m) => a + m.sentToday, 0);
+  const stats = data?.stats ?? [];
+  const leadsTotal = stats.reduce((a, c) => a + c.leads.total, 0);
+  const contacted = stats.reduce((a, c) => a + c.uniqueSent, 0);
+  const notStarted = stats.reduce((a, c) => a + c.leads.notStarted, 0);
+  const inProgress = stats.reduce((a, c) => a + c.leads.inProgress, 0);
+  const finished = stats.reduce((a, c) => a + c.leads.completed + c.leads.stopped, 0);
+  const mailboxesOk = (data?.mailboxes ?? []).filter((m) => m.smtpOk && m.imapOk).length;
 
   return (
     <>
@@ -122,6 +129,21 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
         <Kpi label="Meetings booked" value={String(data?.meetings ?? 0)} sub={`last ${days} days`} icon={CalendarCheck2} tone="emerald" />
         <Kpi label="Bounced" value={String(bounced)} sub={`${formatPct(safePct(bounced, sent))} of sent`} icon={MailX} tone={bounced ? "rose" : undefined} />
         <Kpi label="Unsubscribed" value={String(unsub)} sub="asked not to be emailed" icon={UserMinus} />
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <Kpi label="Leads uploaded" value={String(leadsTotal)} sub="in all Smartlead campaigns" icon={Users} />
+        <Kpi label="Contacted" value={String(contacted)} sub="got at least email 1" icon={MailCheck} />
+        <Kpi label="Waiting to start" value={String(notStarted)} sub="queued, not emailed yet" icon={Hourglass} />
+        <Kpi label="In sequence" value={String(inProgress)} sub="follow-ups still to go" icon={Send} />
+        <Kpi label="Finished" value={String(finished)} sub="replied or all 4 emails sent" icon={CheckCircle2} />
+        <Kpi
+          label="Mailboxes"
+          value={`${mailboxesOk} / ${data?.mailboxes.length ?? 0}`}
+          sub={`connected · ${sentToday} of ${capacity} sent today`}
+          icon={Inbox}
+          tone={(data?.mailboxes.length ?? 0) > mailboxesOk ? "rose" : "emerald"}
+        />
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-3">

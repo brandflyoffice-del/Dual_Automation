@@ -122,11 +122,17 @@ export type InboxConversation = {
 
 export type InboxMessage = {
   type: "SENT" | "REPLY";
+  /** SEQUENCE = Smartlead sequence email, PROSPECT = their reply, AI = our AI answer, TEAM = written in the Inbox. */
+  kind: "SEQUENCE" | "PROSPECT" | "AI" | "TEAM";
   from: string;
   to: string;
   time: string;
   subject: string | null;
+  /** Clean text for the chat view. */
+  text: string;
+  /** Original email HTML (empty for messages we only have as text). */
   html: string;
   quoteHtml: string;
   step: number | null;
+  messageId?: string | null;
 };

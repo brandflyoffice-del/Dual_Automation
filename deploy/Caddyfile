@@ -7,8 +7,8 @@
 
 	# Login is handled by the dashboard itself (login page + signed session cookie, src/middleware.ts).
 
-	# The n8n -> dashboard callback is internal (http://dashboard:3400), never through the internet.
-	@internal path /api/webhooks/n8n
+	# The n8n -> dashboard callbacks are internal (http://dashboard:3400), never through the internet.
+	@internal path /api/webhooks/n8n /api/mail/*
 	respond @internal 404
 
 	reverse_proxy dashboard:3400 {

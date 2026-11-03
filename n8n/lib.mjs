@@ -68,7 +68,7 @@ export class Workflow {
     const inbound = new Set(Object.values(this.connections).flatMap((v) => v.main.flat().map((c) => c.node)));
     for (const n of this.nodes) {
       if (n.type.endsWith("stickyNote")) continue;
-      const isTrigger = /webhook$|scheduleTrigger$/i.test(n.type) && !/respondToWebhook/i.test(n.type);
+      const isTrigger = /webhook$|scheduleTrigger$|emailReadImap$/i.test(n.type) && !/respondToWebhook/i.test(n.type);
       if (!isTrigger && !inbound.has(n.name)) errors.push(`orphan node "${n.name}"`);
     }
     // JS syntax check for Code nodes

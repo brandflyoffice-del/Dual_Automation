@@ -1,4 +1,4 @@
-import { Workflow, webhook, respond, respondHtml, ifNode, switchNode, http, code, postgres, sticky, dashboardNotify, smartleadUrl, googleCalendarIdNode, calExpr, PG_CRED_ID, PG_CRED_NAME } from "./lib.mjs";
+import { Workflow, webhook, respond, respondHtml, ifNode, switchNode, http, code, postgres, sticky, dashboardNotify, smartleadUrl, googleCalendarIdNode, calExpr, DASH, PG_CRED_ID, PG_CRED_NAME } from "./lib.mjs";
 import { CLASSIFY_REPLY_SYSTEM, DRAFT_REPLY_TEMPLATE, PRICE_TOKEN, STARTING_PRICE } from "./prompts.mjs";
 import { SIGN_JS, FMT_JS, PAGE_JS } from "./helpers.mjs";
 import { COUNTRIES } from "./targeting.mjs";
@@ -12,7 +12,14 @@ const LEAD_CONTEXT_SQL = `SELECT l.id, l.email, l.first_name, l.company_name, l.
   l.pain_point, l.pain_point_detail, l.estimated_ticket, l.stage, l.campaign_id, l.outreach_lead_id,
   (SELECT coalesce(jsonb_agg(jsonb_build_object('step', cs.step, 'subject', cs.subject, 'body', cs.body) ORDER BY cs.step), '[]'::jsonb)
      FROM campaign_sequences cs WHERE cs.lead_id = l.id AND cs.status = 'SENT') AS sent_emails,
-  (SELECT e.external_id FROM email_events e WHERE e.lead_id = l.id AND e.external_id IS NOT NULL ORDER BY e.occurred_at DESC LIMIT 1) AS reply_to_id,
+  (SELECT e.external_id FROM email_events e WHERE e.lead_id = l.id AND e.type = 'REPLY_RECEIVED' AND e.external_id IS NOT NULL ORDER BY e.occurred_at DESC LIMIT 1) AS reply_to_id,
+  (SELECT coalesce(jsonb_agg(c ORDER BY c->>'at'), '[]'::jsonb) FROM (
+     SELECT jsonb_build_object('from', CASE WHEN e.type = 'REPLY_RECEIVED' THEN 'prospect' ELSE 'us' END, 'at', e.occurred_at,
+       'text', left(coalesce(e.ai_reply, e.body, ''), 900), 'id', e.external_id) AS c
+     FROM email_events e WHERE e.lead_id = l.id AND e.type IN ('REPLY_RECEIVED', 'AI_REPLY_SENT', 'MANUAL_REPLY_SENT')
+     ORDER BY e.occurred_at DESC LIMIT 10) x) AS conversation,
+  (SELECT coalesce(jsonb_agg(e.external_id ORDER BY e.occurred_at), '[]'::jsonb) FROM email_events e
+     WHERE e.lead_id = l.id AND e.external_id LIKE '<%@%>') AS thread_ids,
   (SELECT e.eaccount FROM email_events e WHERE e.lead_id = l.id AND e.eaccount IS NOT NULL ORDER BY e.occurred_at DESC LIMIT 1) AS eaccount,
   (SELECT e.subject FROM email_events e WHERE e.lead_id = l.id AND e.subject IS NOT NULL ORDER BY e.occurred_at DESC LIMIT 1) AS last_subject,
   (SELECT m.start_time FROM meetings m WHERE m.lead_id = l.id AND m.status IN ('SCHEDULED', 'RESCHEDULED') AND m.start_time > now()
@@ -68,7 +75,7 @@ FROM lead, r
 WHERE l.id = lead.id
 RETURNING l.email, l.stage, l.reply_sentiment, l.needs_human, r.d->>'type' AS event_type;`;
 
-export function buildWorkflow2() {
+export function buildWorkflow2({ mailboxes = [] } = {}) {
   const w = new Workflow("Fenebris_02_Outreach_Events_And_FollowUp_Tracker");
 
   sticky(
@@ -77,6 +84,63 @@ export function buildWorkflow2() {
     [0, -2],
     [820, 230],
   );
+
+  /* ═════ Entry A2: mailbox watch (IMAP) ═════ */
+  // Smartlead only notices a reply when it next polls the mailbox (about 20 minutes in tests). Each sending mailbox is
+  // watched here directly (IMAP IDLE), so a reply reaches the reply brain within seconds. The email is posted to the same
+  // events webhook as a Smartlead EMAIL_REPLY (via: 'mailbox'), one HTTP call per email, so every reply runs on its own.
+  // Smartlead's own webhook for the same reply comes later and is skipped as a duplicate (same message id, seen_reply).
+  if (mailboxes.length) {
+    mailboxes.forEach((email, i) => {
+      const name = `Mailbox Watch (${email})`;
+      w.add(
+        name,
+        "n8n-nodes-base.emailReadImap",
+        2.2,
+        [0, 2.6 + i * 0.8],
+        { mailbox: "INBOX", postProcessAction: "nothing", format: "resolved", options: { customEmailConfig: '["ALL"]', forceReconnect: 30, trackLastMessageId: true } },
+        { credentials: { imap: { id: `fenebrisImap${String(i + 1).padStart(2, "0")}`, name: `Mailbox ${email}` } } },
+      );
+      w.connect(name, "Mailbox Email -> Reply Event");
+    });
+    code(
+      w,
+      "Mailbox Email -> Reply Event",
+      [1, 2.6],
+      "const MINE = " + JSON.stringify(mailboxes) + ";\n" + String.raw`
+const DOMAINS = [...new Set(MINE.map(e => e.split('@')[1]))];
+const ID = /<[^<>\s]+@[^<>\s]+>/g;
+const out = [];
+for (const it of $input.all()) {
+  const m = it.json || {};
+  const from = String((((m.from || {}).value || [])[0] || {}).address || '').toLowerCase();
+  if (!from || MINE.includes(from) || /^(mailer-daemon|postmaster)@/i.test(from)) continue; // our own mail, bounces (Smartlead handles those)
+  const at = m.date ? new Date(m.date) : new Date();
+  if (!isFinite(at) || Date.now() - at.getTime() > 6 * 3600000) continue; // older mail seen again after a reconnect
+  const refs = (String([].concat(m.references || []).join(' ') + ' ' + (m.inReplyTo || '')).match(ID) || []);
+  // Only answers to our own outreach: the thread points at a message one of our mailboxes sent.
+  if (!refs.some(r => DOMAINS.some(d => r.toLowerCase().endsWith('@' + d + '>')))) continue;
+  const toList = ((m.to || {}).value || []).map(v => String(v.address || '').toLowerCase());
+  const box = MINE.find(e => toList.includes(e)) || MINE[0];
+  const plain = String(m.text || '') || String(m.html || '').replace(/<br\s*\/?>|<\/p>|<\/div>/gi, '\n').replace(/<[^>]+>/g, ' ');
+  // Keep only what they wrote: cut at the mail app's "On <date>, <name> wrote:" (often wrapped over two lines) or "> " quotes.
+  const text = plain.split(/\r?\n[ \t]*On [\s\S]{5,260}?wrote:|\r?\n-{2,}\s*Original Message|\r?\n>/i)[0].replace(/\r/g, '').trim();
+  out.push({ json: { body: {
+    event_type: 'EMAIL_REPLY', via: 'mailbox', lead_email: from, from_email: box, subject: m.subject || '',
+    reply_message: { message_id: m.messageId || null, text }, event_timestamp: at.toISOString(), references: refs,
+  } } });
+}
+return out;
+`,
+    );
+    http(w, "Forward Reply To Reply Brain", [2, 2.6], {
+      url: "={{ $env.N8N_INTERNAL_URL }}/webhook/fenebris-outreach-events",
+      headers: { "x-fenebris-secret": "={{ $env.DASHBOARD_WEBHOOK_SECRET }}", "content-type": "application/json" },
+      json: "={{ JSON.stringify($json.body) }}",
+      timeout: 60000,
+    });
+    w.connect("Mailbox Email -> Reply Event", "Forward Reply To Reply Brain");
+  }
 
   /* ═════ Entry A: outreach platform events ═════ */
   // responseNode (not onReceived): n8n refuses onReceived when a Respond node is downstream, and the slot-booking path ends in one.
@@ -121,6 +185,9 @@ return [{ json: { type, event: {
   subject: b.subject || b.reply_subject || b.email_subject || null,
   body: type === 'REPLY_RECEIVED' ? replyText : null,
   occurredAt,
+  // 'mailbox' = seen first by our own IMAP watch (Mailbox Watch lane), 'smartlead' = Smartlead's webhook.
+  via: b.via === 'mailbox' ? 'mailbox' : 'smartlead',
+  references: Array.isArray(b.references) ? b.references.slice(-20) : [],
 } } }];
 `,
   );
@@ -136,6 +203,8 @@ return [{ json: { type, event: {
   // A reply from an address that is not in our leads table (forwarded to a colleague, or added to Smartlead by hand) is never
   // auto-answered. It stays in Smartlead's inbox and the dashboard shows an alert so a person answers it.
   ifNode(w, "Known Lead?", [4.5, -1], "={{ !!$json.id }}");
+  // The mailbox watch also sees warm-up mail and other senders; only a reply Smartlead matched to a campaign is worth an alert.
+  ifNode(w, "Alert Unknown Sender?", [4.8, -0.2], "={{ $('Normalize Event').first().json.event.via !== 'mailbox' }}");
   dashboardNotify(
     w,
     "Dashboard: Reply From Unknown Sender",
@@ -236,13 +305,34 @@ const clean = h => String(h || '')
   .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/[ \t]+/g, ' ')
   .split(/\r?\n\s*On .{5,200} wrote:|\r?\n-{2,}\s*Original Message|\r?\n>/i)[0].replace(/\n{3,}/g, '\n\n').trim();
 const lastReply = [...hist].reverse().find(h => h.type === 'REPLY');
-const thread = hist.slice(-8).map(h => ({ from: h.type === 'REPLY' ? 'prospect' : 'us', at: h.time || null, subject: h.subject || '', text: clean(h.email_body || h.body || '').slice(0, 900) }));
+// Thread memory: the sequence emails come from Smartlead; replies and our answers come from our own events, because answers
+// go out over the mailbox's SMTP (not through Smartlead) and the mailbox watch sees a reply before Smartlead does.
+const conv = Array.isArray(ctx.lead.conversation) ? ctx.lead.conversation : [];
+const seq = hist.filter(h => h.type === 'SENT' && h.email_seq_number).map(h => ({ from: 'us', at: h.time || null, subject: h.subject || '', text: clean(h.email_body || h.body || '').slice(0, 900) }));
+const knownIds = new Set(conv.map(c => c.id).filter(Boolean));
+const slReplies = hist.filter(h => h.type === 'REPLY' && !knownIds.has(h.message_id) && h.message_id !== ctx.event.externalId)
+  .map(h => ({ from: 'prospect', at: h.time || null, subject: '', text: clean(h.email_body || h.body || '').slice(0, 900) }));
+const thread = [...seq, ...slReplies, ...conv.map(c => ({ from: c.from, at: c.at, subject: '', text: c.text }))]
+  .sort((a, b) => new Date(a.at || 0) - new Date(b.at || 0)).slice(-8);
+// The message we answer is the one that started this run (Smartlead's history can lag behind the mailbox watch).
+const replyMessageId = ctx.event.externalId || (lastReply && lastReply.message_id) || ctx.lead.reply_to_id || null;
+const ID = /<[^<>\s]+@[^<>\s]+>/g;
+const references = [...new Set([...hist.map(h => h.message_id || ''), ...(ctx.lead.thread_ids || []), ...(ctx.event.references || []), replyMessageId || '']
+  .join(' ').match(ID) || [])].slice(-12);
+// Smartlead's own message ids are <stats-id@our-domain>; that id lets the Smartlead fallback reply when SMTP is not possible.
+const UUID = /^<([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})@/i;
+const statsFromRefs = (references.map(r => (r.match(UUID) || [])[1]).filter(Boolean).pop()) || null;
+const firstSent = hist.find(h => h.type === 'SENT' && Number(h.email_seq_number) === 1) || hist.find(h => h.type === 'SENT' && h.subject);
+const sentList = ctx.lead.sent_emails || [];
 const ids = {
   campaignId: ctx.event.campaignId || ctx.lead.campaign_id || null, // the webhook's campaign is where the thread really lives
-  replyTime: (lastReply && lastReply.time) || null,
+  replyTime: ctx.event.via === 'mailbox' ? ctx.event.occurredAt : ((lastReply && lastReply.time) || ctx.event.occurredAt || null),
   leadId: ctx.event.smartleadLeadId || ctx.lead.outreach_lead_id || null,
-  replyMessageId: (lastReply && lastReply.message_id) || ctx.event.externalId || ctx.lead.reply_to_id || null,
-  statsId: (lastReply && lastReply.stats_id) || ctx.event.statsId || null,
+  replyMessageId,
+  statsId: (ctx.event.via !== 'mailbox' && lastReply && lastReply.stats_id) || ctx.event.statsId || statsFromRefs,
+  mailbox: (firstSent && firstSent.from) || ctx.event.eaccount || ctx.lead.eaccount || null,
+  subject: (firstSent && firstSent.subject) || (sentList[0] && sentList[0].subject) || ctx.lead.last_subject || ctx.event.subject || '',
+  references,
 };
 return [{ json: { ctx: { ...ctx, thread, ids, threadLoaded: hist.length > 0 } } }];
 `,
@@ -436,8 +526,10 @@ const html = valid ? paras + slotsHtml + tail + signHtml : '';
 const offerText = valid ? text + slotsText + '\n\n' + ctx.signOff : '';
 
 const auto = String($env.AI_AUTO_REPLY || 'false').toLowerCase() === 'true';
-// Smartlead's reply-email-thread needs the message we answer and its email_stats_id (lead_id in the body is rejected with HTTP 400; the lead id is only used to fetch the thread).
-const canThread = !!(ctx.ids.leadId && ctx.ids.replyMessageId && ctx.ids.campaignId && ctx.ids.statsId);
+// Answers go out over the mailbox's SMTP (dashboard /api/mail/send) with In-Reply-To = the message we answer. Without a
+// configured mailbox the dashboard falls back to Smartlead's reply-email-thread, which also needs the campaign and stats id.
+const hasMailbox = String($env.MAILBOX_EMAILS || '').trim() !== '';
+const canThread = !!(ctx.ids.replyMessageId && (hasMailbox || (ctx.ids.campaignId && ctx.ids.statsId)));
 // Booking on a written acceptance follows the same policy as an automatic reply: auto-reply on, nothing flagged, no other price,
 // the model did not ask for review, and no meeting is already booked. Otherwise a person handles it (nothing is sent or booked).
 const accept = acceptIso && auto && !flagged && !priceClaim && draft.safe_to_send !== false && String(ctx.lead.stage || '') !== 'BOOKED' && !ctx.lead.next_meeting ? acceptIso : null;
@@ -447,21 +539,26 @@ if (auto && valid && canThread && !accept && !heldAcceptance && !flagged && !pri
   if (ctx.intent === 'Positive_Booking_Intent' && ctx.confidence >= 0.6) autoSend = true;
   if (ctx.intent === 'Question_Needs_FollowUp' && ctx.confidence >= 0.8 && draft.safe_to_send === true) autoSend = true;
 }
-// reply_email_body is what Smartlead quotes under our answer: only the prospect's own words, never the whole template chain.
-const quoted = escHtml(String(ctx.replyText || '').slice(0, 1500)).replace(/\n/g, '<br>');
-const sendPayload = valid ? Object.assign({ email_body: html, reply_email_body: quoted, reply_message_id: ctx.ids.replyMessageId,
-  reply_email_time: ctx.ids.replyTime ? new Date(ctx.ids.replyTime).toISOString() : new Date().toISOString() },
-  ctx.ids.statsId ? { email_stats_id: ctx.ids.statsId } : {}) : null;
-return [{ json: { ctx: { ...ctx, draft, accept, autoSend, offerText, sendPayload } } }];
+// Only the prospect's own words are quoted under our answer (folded away by Gmail), never the whole template chain.
+const mail = valid ? {
+  mailbox: ctx.ids.mailbox || null, to: ctx.event.email, toName: ctx.lead.first_name || null,
+  subject: ctx.ids.subject || draft.subject, html, text: offerText,
+  inReplyTo: ctx.ids.replyMessageId, references: ctx.ids.references || [],
+  quote: { text: String(ctx.replyText || '').slice(0, 1500), date: ctx.ids.replyTime || null },
+  smartlead: { campaignId: ctx.ids.campaignId ? String(ctx.ids.campaignId) : null, statsId: ctx.ids.statsId || null, replyTime: ctx.ids.replyTime || null },
+} : null;
+return [{ json: { ctx: { ...ctx, draft, accept, autoSend, offerText, mail } } }];
 `,
   );
   ifNode(w, "Accepted A Slot?", [17, -1], "={{ !!$json.ctx.accept }}");
   ifNode(w, "Auto-Send Reply?", [18, -0.4], "={{ $json.ctx.autoSend === true }}");
 
-  http(w, "Smartlead: Send Reply In-Thread", [19, -1.2], {
-    url: smartleadUrl("/campaigns/{{ $('Parse Draft + Send Policy').first().json.ctx.ids.campaignId }}/reply-email-thread"),
-    json: "={{ JSON.stringify($('Parse Draft + Send Policy').first().json.ctx.sendPayload) }}",
-    timeout: 30000,
+  // SMTP through the dashboard (instant, thread headers set by us); Smartlead's reply API is the dashboard's fallback.
+  http(w, "Send Reply In-Thread (Mailbox)", [19, -1.2], {
+    url: "={{ $env.DASHBOARD_URL }}/api/mail/send",
+    headers: DASH.headers,
+    json: "={{ JSON.stringify($('Parse Draft + Send Policy').first().json.ctx.mail) }}",
+    timeout: 45000,
   });
   code(
     w,
@@ -469,7 +566,8 @@ return [{ json: { ctx: { ...ctx, draft, accept, autoSend, offerText, sendPayload
     [20, -1.2],
     String.raw`
 const c = $('Parse Draft + Send Policy').first().json.ctx;
-const sendOk = !($input.first().json && $input.first().json.error);
+const r = $input.first().json || {};
+const sendOk = r.ok === true && !r.error;
 return [{ json: { event: { ...c.event, sentiment: c.intent, needsHuman: !sendOk, aiReply: c.offerText, aiSubject: c.draft.subject, aiReplySent: sendOk } } }];
 `,
   );
@@ -561,7 +659,8 @@ const first = String(row.first_name || '').trim() || v.email.split('@')[0];
 const ms = new Date(v.startIso).getTime();
 return [{ json: { bk: { source: 'link', email: v.email, startIso: v.startIso, tz, firstName: first, name: first, label: slotLabel(ms, tz), known: !!row.id,
   nextMeeting: row.next_meeting || null,
-  ids: { campaignId: row.campaign_id || null, leadId: row.outreach_lead_id || null, replyMessageId: row.reply_to_id || null, statsId: null } } } }];
+  ids: { campaignId: row.campaign_id || null, leadId: row.outreach_lead_id || null, replyMessageId: row.reply_to_id || null, statsId: null,
+    mailbox: row.eaccount || null, subject: ((row.sent_emails || [])[0] || {}).subject || row.last_subject || '', references: row.thread_ids || [] } } } }];
 `,
   );
 
@@ -666,24 +765,41 @@ return $input.all();
     String.raw`
 const b = $('Evaluate Booking').first().json;
 const bk = b.bk;
-// The thread tells us which message to answer and its email_stats_id (a time-button click has neither).
+// Answer the prospect's newest message. Our own events know it first (the mailbox watch is faster than Smartlead), the
+// Smartlead thread adds its stats id for the fallback path and the sequence's message ids for the References header.
 const res = $input.first().json || {};
 const hist = Array.isArray(res.history) ? res.history : [];
 const lastReply = [...hist].reverse().find(h => h.type === 'REPLY');
 const base = bk.ids || {};
-const ids = Object.assign({}, base, lastReply ? { replyMessageId: lastReply.message_id || base.replyMessageId, statsId: lastReply.stats_id || base.statsId, replyTime: lastReply.time || base.replyTime } : {});
+const replyMessageId = base.replyMessageId || (lastReply && lastReply.message_id) || null;
+const sameAsSmartlead = !!(lastReply && lastReply.message_id === replyMessageId);
+const ID = /<[^<>\s]+@[^<>\s]+>/g;
+const UUID = /^<([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})@/i;
+const references = [...new Set([...hist.map(h => h.message_id || ''), ...(base.references || []), replyMessageId || ''].join(' ').match(ID) || [])].slice(-12);
+const firstSent = hist.find(h => h.type === 'SENT' && Number(h.email_seq_number) === 1);
+const ids = Object.assign({}, base, {
+  replyMessageId, references,
+  statsId: base.statsId || (sameAsSmartlead && lastReply.stats_id) || references.map(r => (r.match(UUID) || [])[1]).filter(Boolean).pop() || null,
+  replyTime: base.replyTime || (sameAsSmartlead && lastReply.time) || null,
+  mailbox: base.mailbox || (firstSent && firstSent.from) || null,
+  subject: base.subject || (firstSent && firstSent.subject) || 'Your Google Meet',
+});
 const sender = $env.SENDER_NAME || 'Jay T';
 const brand = String(ids.campaignId || '') === '4238487' ? 'Expert in SEO' : 'TapadiaTech';
 const text = 'Hi ' + bk.firstName + ',\n\nYour slot is booked for ' + bk.label + '. A Google Calendar invite with the Google Meet link is on its way to ' + bk.email + '.\n\nIf anything changes, just reply here and we will sort it out.\n\nWarm regards,\n' + sender + '\n' + brand;
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const html = esc(text).split(/\n{2,}/).map(p => '<p style="margin:0 0 14px 0">' + p.replace(/\n/g, '<br>') + '</p>').join('');
-const canSend = !!(ids.campaignId && ids.leadId && ids.replyMessageId && ids.statsId);
+const hasMailbox = String($env.MAILBOX_EMAILS || '').trim() !== '';
+const canSend = !!(ids.replyMessageId && (hasMailbox || (ids.campaignId && ids.statsId)));
 // Quote only the prospect's last message (cut at its own "On ... wrote:"), not the earlier template emails.
-const lastText = String((lastReply && lastReply.email_body) || '').replace(/<br\s*\/?>|<\/p>|<\/div>/gi, '\n').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
-  .split(/\r?\n\s*On .{5,200} wrote:|\r?\n-{2,}\s*Original Message|\r?\n>/i)[0].replace(/[ \t]+/g, ' ').trim().slice(0, 1500);
-const sendPayload = Object.assign({ email_body: html, reply_email_body: esc(lastText).replace(/\n/g, '<br>'), reply_message_id: ids.replyMessageId,
-  reply_email_time: ids.replyTime ? new Date(ids.replyTime).toISOString() : new Date().toISOString() }, ids.statsId ? { email_stats_id: ids.statsId } : {});
-return [{ json: { canSend, ids, sendPayload, record: { email: bk.email, subject: 'Meeting confirmed', body: text } } }];
+const chatText = bk.source === 'chat' && $('Parse Draft + Send Policy').isExecuted ? String($('Parse Draft + Send Policy').first().json.ctx.replyText || '') : '';
+const lastText = chatText || (sameAsSmartlead ? String(lastReply.email_body || '').replace(/<br\s*\/?>|<\/p>|<\/div>/gi, '\n').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
+  .split(/\r?\n\s*On .{5,200} wrote:|\r?\n-{2,}\s*Original Message|\r?\n>/i)[0].replace(/[ \t]+/g, ' ').trim() : '');
+const mail = { mailbox: ids.mailbox, to: bk.email, toName: bk.firstName || null, subject: ids.subject, html, text,
+  inReplyTo: ids.replyMessageId, references: ids.references,
+  quote: lastText ? { text: lastText.slice(0, 1500), date: ids.replyTime || null } : null,
+  smartlead: { campaignId: ids.campaignId ? String(ids.campaignId) : null, statsId: ids.statsId || null, replyTime: ids.replyTime || null } };
+return [{ json: { canSend, ids, mail, record: { email: bk.email, subject: 'Meeting confirmed', body: text } } }];
 `,
   );
   http(w, "Smartlead: Get Thread (Confirm)", [24.5, -2.2], {
@@ -704,10 +820,11 @@ return [{ json: { event: { ...c.event, sentiment: c.intent, needsHuman: false, a
 `,
   );
   ifNode(w, "Can Send Confirmation?", [26, -2.2], "={{ $json.canSend === true }}");
-  http(w, "Smartlead: Send Booking Confirmation", [27, -2.6], {
-    url: smartleadUrl("/campaigns/{{ $json.ids.campaignId }}/reply-email-thread"),
-    json: "={{ JSON.stringify($json.sendPayload) }}",
-    timeout: 30000,
+  http(w, "Send Booking Confirmation (Mailbox)", [27, -2.6], {
+    url: "={{ $env.DASHBOARD_URL }}/api/mail/send",
+    headers: DASH.headers,
+    json: "={{ JSON.stringify($json.mail) }}",
+    timeout: 45000,
   });
   postgres(
     w,
@@ -721,7 +838,7 @@ ins AS (
   RETURNING id
 )
 SELECT (SELECT count(*) FROM ins) AS inserted, (SELECT r.d->>'email' FROM r) AS email;`,
-    "={{ [JSON.stringify(Object.assign({}, $('Build Booking Confirmation').first().json.record, { sent: !$json.error }))] }}",
+    "={{ [JSON.stringify(Object.assign({}, $('Build Booking Confirmation').first().json.record, { sent: $json.ok === true && !$json.error }))] }}",
     { alwaysOutput: true },
   );
   dashboardNotify(
@@ -779,7 +896,8 @@ return [{ json: $input.first().json }];
   w.connect("Is Reply?", "DB: Record Event + Update Lead", 1); // non-reply events: straight to DB (event is already shaped)
   w.connect("DB: Get Lead Context", "Known Lead?");
   w.connect("Known Lead?", "Build Classify Request", 0);
-  w.connect("Known Lead?", "Dashboard: Reply From Unknown Sender", 1);
+  w.connect("Known Lead?", "Alert Unknown Sender?", 1);
+  w.connect("Alert Unknown Sender?", "Dashboard: Reply From Unknown Sender", 0);
   w.chain("Build Classify Request", "AI: Classify Reply (Sentiment)", "Parse Classification", "Route by Intent");
   w.connect("Route by Intent", "Smartlead: Note Interested", 0);
   w.connect("Route by Intent", "Smartlead: Get Thread", 0);
@@ -804,9 +922,9 @@ return [{ json: $input.first().json }];
   );
   w.connect("Accepted A Slot?", "Booking Input (Chat)", 0);
   w.connect("Accepted A Slot?", "Auto-Send Reply?", 1);
-  w.connect("Auto-Send Reply?", "Smartlead: Send Reply In-Thread", 0);
+  w.connect("Auto-Send Reply?", "Send Reply In-Thread (Mailbox)", 0);
   w.connect("Auto-Send Reply?", "Prepare Event: Needs Human", 1);
-  w.connect("Smartlead: Send Reply In-Thread", "Prepare Event: AI Replied");
+  w.connect("Send Reply In-Thread (Mailbox)", "Prepare Event: AI Replied");
   w.connect("Prepare Event: AI Replied", "DB: Record Event + Update Lead");
   w.connect("Prepare Event: Needs Human", "DB: Record Event + Update Lead");
   w.connect("DB: Record Event + Update Lead", "Dashboard: Realtime Event");
@@ -833,8 +951,8 @@ return [{ json: $input.first().json }];
   w.connect("Booked?", "Link Booking? (failed)", 1);
   w.connect("Link Booking? (ok)", "Page: Booked", 0);
   w.connect("Build Booking Confirmation", "Can Send Confirmation?");
-  w.connect("Can Send Confirmation?", "Smartlead: Send Booking Confirmation", 0);
-  w.chain("Smartlead: Send Booking Confirmation", "DB: Record Booking Confirmation", "Dashboard: Booking Confirmed");
+  w.connect("Can Send Confirmation?", "Send Booking Confirmation (Mailbox)", 0);
+  w.chain("Send Booking Confirmation (Mailbox)", "DB: Record Booking Confirmation", "Dashboard: Booking Confirmed");
   w.connect("Link Booking? (failed)", "Page: Slot Unavailable", 0);
   w.connect("Link Booking? (failed)", "Prepare Event: Booking Failed", 1);
   w.connect("Prepare Event: Booking Failed", "DB: Record Event + Update Lead");

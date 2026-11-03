@@ -58,6 +58,22 @@ fs.writeFileSync("/app/n8n/workflows/.cred-gsheets.json",JSON.stringify([mk("dXH
 '
 docker cp "$APP/n8n/workflows/.cred-pg.json" "$N8N:/tmp/cred-pg.json"
 docker exec "$N8N" n8n import:credentials --input=/tmp/cred-pg.json
+# Mailbox watch: one IMAP credential per sending mailbox (MAILBOXES in n8n-config.json, filled by scripts/sync-mailboxes.mjs),
+# ids fenebrisImap01.. in the same order the workflow build uses. Refreshed every deploy, like Postgres.
+node_run node -e '
+const fs=require("fs");
+const cfg=JSON.parse(fs.readFileSync("/app/n8n/config.local.json","utf8"));
+const list=(Array.isArray(cfg.MAILBOXES)?cfg.MAILBOXES:[]).filter(m=>m.email&&m.imap&&m.imap.host);
+fs.writeFileSync("/app/n8n/workflows/.cred-imap.json",JSON.stringify(list.map((m,i)=>({id:"fenebrisImap"+String(i+1).padStart(2,"0"),name:"Mailbox "+String(m.email).toLowerCase(),type:"imap",
+ data:{user:m.imap.user,password:m.imap.password,host:m.imap.host,port:Number(m.imap.port),secure:m.imap.secure!==false,allowUnauthorizedCerts:false}}))));
+console.log(list.length+" mailbox credential(s)");'
+docker cp "$APP/n8n/workflows/.cred-imap.json" "$N8N:/tmp/cred-imap.json"
+if grep -q fenebrisImap "$APP/n8n/workflows/.cred-imap.json"; then
+  docker exec "$N8N" n8n import:credentials --input=/tmp/cred-imap.json
+else
+  echo "no mailboxes configured (mailbox watch off)"
+fi
+docker exec -u root "$N8N" rm -f /tmp/cred-imap.json || true   # holds mailbox passwords; docker cp leaves it root-owned
 for pair in "y5FL0LJTf7OK7BZo:gcal" "dXHwZhsv0bI9TBiw:gsheets"; do
   id="${pair%%:*}"; f="${pair##*:}"
   if docker exec "$N8N" n8n export:credentials --id="$id" --output=/tmp/probe.json >/dev/null 2>&1; then
