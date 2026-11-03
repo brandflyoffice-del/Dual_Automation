@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { authRequired, SESSION_COOKIE, verifySession } from "@/lib/auth";
 
 // Pages and APIs that work without a dashboard login.
-const PUBLIC = [/^\/login$/, /^\/api\/auth\//, /^\/r\//, /^\/privacy$/, /^\/terms$/, /^\/api\/brand\/logo$/, /^\/brand\//, /^\/api\/webhooks\/n8n$/, /^\/api\/mail\/send$/];
+const PUBLIC = [/^\/login$/, /^\/api\/auth\//, /^\/r\//, /^\/privacy$/, /^\/terms$/, /^\/api\/brand\/logo$/, /^\/brand\//, /^\/api\/webhooks\/n8n$/, /^\/api\/mail\/send$/, /^\/api\/health$/];
 
 export async function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl;

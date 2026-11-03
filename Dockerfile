@@ -17,5 +17,5 @@ RUN npm run build
 ENV NODE_ENV=production
 EXPOSE 3400
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
-  CMD curl -fsS http://localhost:3400/api/system/status -o /dev/null || exit 1
+  CMD curl -fsS http://localhost:3400/api/health -o /dev/null || exit 1
 CMD ["npm", "run", "start"]
