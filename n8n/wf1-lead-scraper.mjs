@@ -607,7 +607,7 @@ $input.all().forEach((it, i) => {
       companyName: lead.companyName, companyDomain: lead.companyDomain, companyWebsite: lead.companyWebsite, country: lead.country, region: lead.region,
       industry: lead.industry, employeeCount: lead.employeeCount, annualRevenue: lead.annualRevenue, painPoint: ai.pain_point_tag, painPointDetail: ai.pain_point_detail,
       auditFindings: lead.auditFindings, recommendedService: serviceName, qualificationScore: Math.max(0, Math.min(100, Math.round(ai.qualification_score || 0))),
-      estimatedTicket: ticket, dossier: { summary: ai.dossier_summary, opportunity: ai.opportunity_reason || ai.pain_point_detail, discoveryQuestions: ai.discovery_questions, talkingPoints: ai.talking_points },
+      estimatedTicket: ticket, dossier: { summary: ai.dossier_summary, business: ai.business_summary && ai.business_summary !== 'unknown' ? ai.business_summary : null, opportunity: ai.opportunity_reason || ai.pain_point_detail, discoveryQuestions: ai.discovery_questions, talkingPoints: ai.talking_points },
       campaignId: ctx.campaignId, leadSource: lead.leadSource || ctx.provider || 'ai-ark', sequences,
     },
   } });

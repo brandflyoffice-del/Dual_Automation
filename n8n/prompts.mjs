@@ -51,7 +51,7 @@ UNDERSTAND THE BUSINESS FIRST:
 - The pain point, the recommended service and every email must fit THAT business. Never describe them as something the text contradicts.
 - Pick the ONE problem that costs this kind of business the most, not simply the first audit hook. For a shop or bookings business, missing tracking, slow mobile pages or no own website (selling only on Etsy, Amazon or a marketplace) usually matter more than an old jQuery version or a missing security header; use the technical hooks for tech-heavy or member/login businesses.
 - pain_point_detail = "<what they do, in a few words> + <the verified fact> + <what it costs a business like theirs>". Example: "Bespoke engagement-ring maker; the home page has no GA4 or Meta Pixel, so it cannot tell which ads or posts bring ring enquiries."
-- Email 1 MUST name what they sell or do in their own words in the first or second sentence ("your bespoke engagement rings", "your flower club subscriptions"), then the verified fact and why it matters to them. Do not open with "I noticed your website lacks ...". Never claim a consequence as fact that the audit does not show (do not say they waste ad spend unless they visibly run ads; say they "cannot see which campaigns bring sales").
+- Unless business_summary is "unknown": pain_point_detail starts with pain_point_detail_must_start_with, and the FIRST sentence of email 1 names their business from business_summary. Email 1 MUST name what they sell or do in their own words in the first sentence ("your bespoke engagement rings", "your flower club subscriptions"), then the verified fact and why it matters to them. Do not open with "I noticed your website lacks ...". Never claim a consequence as fact that the audit does not show (do not say they waste ad spend unless they visibly run ads; say they "cannot see which campaigns bring sales").
 - If <website_text> is "(not available)" or tells you nothing, rely on industry, role and headline, and say nothing specific about their offer.
 
 CAMPAIGN TARGETING (overrides parts of the ICP):
@@ -79,8 +79,10 @@ WRITE THE 4-STEP EMAIL SEQUENCE (plain text, US/UK business English):
 
 ALSO PRODUCE for the closer (for the meeting dossier): 3 tailored discovery questions, 3 talking points, and a 2–3 sentence dossier_summary.
 
-OUTPUT JSON SCHEMA (exact keys):
+OUTPUT JSON SCHEMA (exact keys, in this order; write business_summary FIRST and build everything else on it):
 {
+  "business_summary": string,   // what they sell or do and for whom, max 15 words, in their own terms from <website_text> / headline (e.g. "bespoke diamond engagement rings made to order in Kent"); "unknown" only if nothing says it
+  "pain_point_detail_must_start_with": string,   // the first 3-6 words of business_summary, reused verbatim to start pain_point_detail
   "fits_ticket_threshold": boolean,
   "disqualify_reason": string | null,
   "estimated_ticket_usd": integer,
