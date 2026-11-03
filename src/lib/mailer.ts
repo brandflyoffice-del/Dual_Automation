@@ -5,12 +5,15 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import nodemailer from "nodemailer";
+import MailComposer from "nodemailer/lib/mail-composer";
+import { ImapFlow } from "imapflow";
 import { replyInThread } from "@/lib/smartlead";
 
 type Mailbox = {
   email: string;
   name: string;
   smtp: { host: string; port: number; secure: boolean; user: string; password: string };
+  imap?: { host: string; port: number; secure: boolean; user: string; password: string };
 };
 
 let cached: { at: number; list: Mailbox[] } | null = null;
@@ -44,6 +47,29 @@ function transportFor(m: Mailbox) {
     transports.set(m.email, t);
   }
   return t;
+}
+
+/**
+ * A copy of every answer goes into the mailbox's Sent folder (created if missing), so anyone who opens the mailbox in
+ * webmail sees both sides of the conversation. SMTP alone keeps no copy. Never blocks or fails the send.
+ */
+async function saveToSent(box: Mailbox, raw: Buffer) {
+  if (!box.imap?.host) return;
+  const c = new ImapFlow({ host: box.imap.host, port: box.imap.port, secure: box.imap.secure, auth: { user: box.imap.user, pass: box.imap.password }, logger: false });
+  try {
+    await c.connect();
+    const list = await c.list();
+    let path = list.find((f) => f.specialUse === "\Sent")?.path ?? list.find((f) => /^(inbox[./])?(sent|sent items|sent mail|sent messages)$/i.test(f.path))?.path;
+    if (!path) {
+      await c.mailboxCreate("Sent");
+      path = "Sent";
+    }
+    await c.append(path, raw, ["\Seen"]);
+  } catch (e) {
+    console.warn(`[mailer] could not save a copy to Sent for ${box.email}: ${(e as Error).message}`);
+  } finally {
+    await c.logout().catch(() => {});
+  }
 }
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -91,7 +117,8 @@ export async function sendReply(mail: ReplyMail): Promise<SendResult> {
   let smtpError: string | null = null;
   if (box && inReplyTo) {
     try {
-      const info = await transportFor(box).sendMail({
+      // Built once, so the email sent and the copy saved to Sent are byte-for-byte the same (same Message-ID).
+      const compiled = new MailComposer({
         from: { name: box.name || box.email, address: box.email },
         to: mail.toName ? { name: mail.toName, address: mail.to } : mail.to,
         subject: reSubject(mail.subject),
@@ -99,8 +126,11 @@ export async function sendReply(mail: ReplyMail): Promise<SendResult> {
         text,
         inReplyTo,
         references: refs,
-      });
-      return { ok: true, via: "smtp", messageId: info.messageId ?? null };
+      }).compile();
+      const raw = await compiled.build();
+      await transportFor(box).sendMail({ envelope: { from: box.email, to: [mail.to] }, raw });
+      void saveToSent(box, raw);
+      return { ok: true, via: "smtp", messageId: compiled.messageId() ?? null };
     } catch (e) {
       smtpError = (e as Error).message;
     }
