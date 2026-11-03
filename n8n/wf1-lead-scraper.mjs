@@ -410,7 +410,8 @@ return out;
   http(w, "Fetch Website Home Page", [12, 0], {
     method: "GET",
     url: "={{ $json.companyWebsite }}",
-    headers: { "User-Agent": "Mozilla/5.0 (compatible; FenebrisAuditBot/1.0; +https://fenebris.com)", Accept: "text/html" },
+    // A normal browser identity: many sites block self-declared bots, which made live sites look "unreachable".
+    headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36", Accept: "text/html,application/xhtml+xml", "Accept-Language": "en-US,en;q=0.9" },
     timeout: 20000,
     text: true,
     batching: [5, 500],
@@ -521,7 +522,7 @@ return $input.all().map(it => {
   const user =
     '<prospect>' + JSON.stringify({ first_name: l.firstName, role: l.role, company: l.companyName, website: l.companyWebsite, country: l.country, region: l.region,
       industry: l.industry, employees: l.employeeCount, annual_revenue_usd: l.annualRevenue }) + '</prospect>\n' +
-    '<audit>' + JSON.stringify({ verified_hooks: l.auditFindings.verifiedHooks, site_reachable: l.auditFindings.reachable,
+    '<audit>' + JSON.stringify({ verified_hooks: l.auditFindings.verifiedHooks, site_reachable: l.auditFindings.reachable ? true : 'unknown',
       mobile_pagespeed: l.auditFindings.pageSpeedMobile, lcp_seconds: l.auditFindings.lcpSeconds, tech_stack: l.auditFindings.techStack }) + '</audit>\n' +
     '<case_studies>' + (($env.CASE_STUDIES) || '') + '</case_studies>\n' +
     '<booking_link>' + booking + '</booking_link>\n<sender_name>' + sender + '</sender_name>\n' +

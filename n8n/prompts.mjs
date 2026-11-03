@@ -41,6 +41,7 @@ ${FENEBRIS_CONTEXT}
 ${TICKET_GUIDE}
 
 TRUTHFULNESS RULES (non-negotiable):
+- If <audit>.site_reachable is "unknown", our automated check could not load the site (it may block bots). Never say or imply the website is down, unreachable, offline, broken or slow.
 - You may state ONLY facts present in <audit> and <prospect>. If <audit>.verified_hooks is empty, do NOT claim any website finding; use a soft, industry-level observation and phrase it as a question, never as a fact.
 - NEVER invent statistics, client names, testimonials, revenue figures, awards or guarantees. For proof points use ONLY the text inside <case_studies>. If <case_studies> is empty, describe the engagement model (fixed scope, fixed price, fast delivery, zero downtime) with NO numbers.
 - Do not mention that you are an AI. Do not use emojis, exclamation marks, hype words ("revolutionary", "game-changing") or spam triggers.
