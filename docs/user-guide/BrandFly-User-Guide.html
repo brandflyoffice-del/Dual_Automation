@@ -201,7 +201,9 @@
 
   <h3>What happens after you click Launch</h3>
   <ul>
-    <li>Leads appear in <b>Lead Intelligence</b> within a few minutes, each with its pain point and score.</li>
+    <li>A <b>progress card</b> appears at the bottom right and follows every step: searching, filtering, checking emails and websites, AI writing the emails, adding to Smartlead. You can keep working on any page; a notification tells you when it is done and how many leads were added.</li>
+    <li>Leads appear in <b>Lead Intelligence</b> within a few minutes, each with its pain point, what the company does and the offer chosen for them.</li>
+    <li>Each email names one concrete thing you offer (from your <b>Services</b> list), in plain words, with a subject line about that company.</li>
     <li>Each lead gets 4 personal emails and is added to the email campaign.</li>
     <li>Emails are sent within each mailbox's daily limit, so a large batch goes out over several days.</li>
     <li>Not every person found is used: leads without a verified work email, outside your filters or not a decision maker are skipped.</li>
@@ -225,6 +227,7 @@
   </table>
   <h3>How times are chosen</h3>
   <ul>
+    <li>The buttons show the prospect's <b>own local time</b>, for example "Tuesday 10 November, 10:30 AM (New York time)"; for the US, Canada and Australia the state or city is used. Your dashboard always shows Indian time.</li>
     <li>Only times that are free in <b>both</b> your booking calendar and your Google Calendar are offered, so meetings never overlap.</li>
     <li>Times are shown in the prospect's own time zone and only between 8:00 and 18:00 there.</li>
     <li>When the prospect clicks a time, the calendar is checked again before booking. If it was taken in the meantime, they are asked to pick another.</li>
@@ -299,6 +302,12 @@
 
   <h2 style="margin-top:9mm"><span class="num">10</span>Email Analytics</h2>
   <p>Choose <span class="ui">7 days</span>, <span class="ui">30 days</span> or <span class="ui">90 days</span> at the top right.</p>
+  <ul>
+    <li><b>Sending ON/OFF</b> (top of the page): while sending is OFF, Launch keeps collecting leads and nobody is emailed. <span class="ui">Start sending</span> switches campaigns on (it links your mailboxes and sets a Mon-Fri sending window); <span class="ui">Pause all sending</span> stops it. Each campaign also has its own Start / Pause button. Both need a second click to confirm.</li>
+    <li><b>Mailboxes:</b> <span class="ui">+ Add mailbox</span> connects a new mailbox (email, password or app password, server settings; ready-made presets for Google Workspace, Microsoft 365 and Zoho). <span class="ui">Sync from Smartlead</span> picks up mailboxes you connected in Smartlead itself. New mailboxes are watched for replies within a minute.</li>
+    <li><b>Warm-up:</b> start or stop warm-up for one mailbox, or switch it on for all at once.</li>
+    <li><b>Quick links</b> open Smartlead, Apify, the n8n workflow, Cal.com, Google Calendar and the Google Sheet in a new tab.</li>
+  </ul>
   <table>
     <tr><th>Block</th><th>What it tells you</th></tr>
     <tr><td>Top numbers</td><td>Emails sent, replies and reply rate, interested replies, meetings booked, bounces and unsubscribes.</td></tr>
@@ -327,11 +336,11 @@
   <p>The instructions the AI follows when it answers prospects (who you are, your services, tone, what not to say) and the <b>starting price</b> it may mention. Edit the parts, check the <i>Live preview</i> of what a prospect would read, then save. You can always go back to the built-in version.</p>
   <div class="warn"><b>Change it carefully</b>The prompt affects every future reply. Change one thing at a time and read the preview before saving.</div>
   <h3>Settings → Brand &amp; logo</h3>
-  <p>Upload your logo and set the dashboard name. They appear in the menu, on the login page and in the browser tab.</p>
+  <p>Upload your logo and set the dashboard name. They appear in the menu, on the login page and in the browser tab. The <b>brand colour</b> is taken from the logo automatically and used for every button and highlight; change it with the colour picker if you like.</p>
   <h3>Settings → Meeting alerts</h3>
   <p>Email addresses that receive meeting notifications, plus the steps to get Google Calendar's daily agenda by email.</p>
   <h3>Services</h3>
-  <p>Add a service line, its sub-services and the signals to look for, and choose which email campaign it uses. New sub-services show up in Launch straight away.</p>
+  <p>Add a service line, its sub-services, the signals to look for and <b>what we deliver</b> (in plain words), and choose which email campaign it uses. The emails offer exactly what you write under "what we deliver". New sub-services show up in Launch straight away.</p>
   <h3>Weekly Reports</h3>
   <p>Click <span class="ui">Generate Weekly Client Report</span>. You get a shareable link; open it and use <i>Save as PDF</i> to keep a copy.</p>
 </section>
@@ -342,8 +351,8 @@
   <ul>
     <li><b>Warm-up first.</b> New mailboxes need <b>2-3 weeks of warm-up</b> before real campaigns. Keep warm-up switched on in Smartlead all the time.</li>
     <li><b>Daily limits.</b> Each mailbox sends a limited number of emails per day (about 20 while warming). To send more, add more mailboxes rather than raising the limit.</li>
-    <li><b>Adding a mailbox.</b> Connect it in Smartlead, then ask your BrandFly contact to link it to the system, so its replies are answered within seconds too.</li>
-    <li><b>Starting a campaign.</b> Each email campaign is switched on once in Smartlead (with its mailboxes attached). After that, new leads you launch are sent automatically.</li>
+    <li><b>Adding a mailbox.</b> Email Analytics → <span class="ui">+ Add mailbox</span>, or connect it in Smartlead and click <span class="ui">Sync from Smartlead</span>. Its replies are answered within seconds from then on.</li>
+    <li><b>Starting a campaign.</b> Email Analytics → <span class="ui">Start sending</span> (all campaigns) or the campaign's own Start button. After that, new leads you launch are sent automatically.</li>
     <li><b>Keep Smartlead's own AI auto-reply OFF.</b> This system answers replies; two systems answering would confuse prospects.</li>
     <li><b>Watch bounces.</b> If bounces go above about 3%, pause and check the lead filters (prefer verified work emails).</li>
     <li><b>Keep Smartlead paid.</b> Emails stop if the Smartlead subscription ends.</li>
