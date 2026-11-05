@@ -18,8 +18,12 @@ export const NAME = "Fenebris_Outreach_Autopilot";
 const keepEnv = process.argv.includes("--env");
 const cfgPath = join(here, "config.local.json");
 const cfg = existsSync(cfgPath) ? JSON.parse(readFileSync(cfgPath, "utf8")) : {};
-// Sending mailboxes (addresses only; their IMAP logins become n8n credentials fenebrisImap01.. at deploy).
-const mailboxes = (Array.isArray(cfg.MAILBOXES) ? cfg.MAILBOXES : []).map((m) => String(m.email || "").toLowerCase()).filter(Boolean);
+// The live reply watch runs in the dashboard now (src/lib/mailbox-watch.ts: mailboxes added in the dashboard are
+// watched without a deploy). The old n8n IMAP lane is built only with N8N_IMAP_WATCH=1; never run both, or a reply
+// could be answered twice.
+const mailboxes = process.env.N8N_IMAP_WATCH === "1"
+  ? (Array.isArray(cfg.MAILBOXES) ? cfg.MAILBOXES : []).map((m) => String(m.email || "").toLowerCase()).filter(Boolean)
+  : [];
 
 
 const wf = mergeWorkflows(NAME, [

@@ -164,3 +164,29 @@ model LaunchRun {
   @@index([startedAt])
   @@map("launch_runs")
 }
+
+/// Sending mailboxes: SMTP for in-thread answers, IMAP for the live reply watch. Passwords are AES-GCM encrypted
+/// (key from AUTH_SECRET / WEBHOOK_SECRET). Added from the dashboard or synced from Smartlead.
+model Mailbox {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email        String   @unique
+  name         String   @default("")
+  smartleadId  String?  @map("smartlead_id")
+  smtpHost     String   @map("smtp_host")
+  smtpPort     Int      @map("smtp_port")
+  smtpSecure   Boolean  @default(true) @map("smtp_secure")
+  smtpUser     String   @map("smtp_user")
+  smtpPassword String   @map("smtp_password")
+  imapHost     String   @map("imap_host")
+  imapPort     Int      @map("imap_port")
+  imapSecure   Boolean  @default(true) @map("imap_secure")
+  imapUser     String   @map("imap_user")
+  imapPassword String   @map("imap_password")
+  lastUid      Int?     @map("last_uid")
+  watchError   String?  @map("watch_error")
+  watchedAt    DateTime? @map("watched_at") @db.Timestamptz
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("mailboxes")
+}

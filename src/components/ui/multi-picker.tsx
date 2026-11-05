@@ -85,7 +85,7 @@ export function MultiPicker({
               key={c.key}
               className={cn(
                 "inline-flex max-w-full items-center gap-1 rounded-md border py-0.5 pl-2 pr-1 text-xs font-medium",
-                c.muted ? "border-border bg-muted text-foreground" : "border-emerald/30 bg-emerald/10 text-emerald-800",
+                c.muted ? "border-border bg-muted text-foreground" : "border-emerald/30 bg-emerald/10 text-emerald",
               )}
             >
               <span className="truncate">{c.label}</span>

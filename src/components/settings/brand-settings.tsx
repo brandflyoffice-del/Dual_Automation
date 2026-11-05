@@ -9,8 +9,42 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input, Label } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { brandAccent, DEFAULT_BRAND_COLOR } from "@/lib/settings-shared";
 
-type Brand = { name: string; logo: string | null; custom: boolean; updatedAt?: string | null };
+/**
+ * The logo's main colour: the most common clearly coloured pixel group (white, black and greys are ignored).
+ * Runs in the browser on the uploaded file; null when the logo has no real colour (black-and-white logos).
+ */
+function logoColor(img: HTMLImageElement): string | null {
+  try {
+    const c = document.createElement("canvas");
+    const w = 96;
+    const h = Math.max(1, Math.round((img.naturalHeight / Math.max(1, img.naturalWidth)) * w));
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0, w, h);
+    const d = ctx.getImageData(0, 0, w, h).data;
+    const buckets = new Map<number, { n: number; r: number; g: number; b: number }>();
+    for (let i = 0; i < d.length; i += 4) {
+      const [r, g, b, a] = [d[i], d[i + 1], d[i + 2], d[i + 3]];
+      const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+      if (a < 200 || mx < 40 || (mx > 235 && mn > 235) || (mx - mn) / Math.max(mx, 1) < 0.25) continue;
+      const k = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
+      const e = buckets.get(k) ?? { n: 0, r: 0, g: 0, b: 0 };
+      e.n++; e.r += r; e.g += g; e.b += b;
+      buckets.set(k, e);
+    }
+    const top = [...buckets.values()].sort((x, y) => y.n - x.n)[0];
+    if (!top || top.n < 20) return null;
+    return "#" + [top.r, top.g, top.b].map((v) => Math.round(v / top.n).toString(16).padStart(2, "0")).join("");
+  } catch {
+    return null;
+  }
+}
+
+type Brand = { name: string; logo: string | null; color?: string | null; custom: boolean; updatedAt?: string | null };
 const TYPES = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
 const MAX_BYTES = 500_000;
 const DEFAULT_LOGO = "/brand/brandfly.png";
@@ -25,6 +59,7 @@ export function BrandSettings() {
   const [saved, setSaved] = useState<Brand | null>(null);
   const [name, setName] = useState("");
   const [logo, setLogo] = useState<string | null>(null);
+  const [color, setColor] = useState<string>(DEFAULT_BRAND_COLOR);
   const [fileInfo, setFileInfo] = useState<{ name: string; size: number; w?: number; h?: number } | null>(null);
   const [drag, setDrag] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -37,6 +72,7 @@ export function BrandSettings() {
         setSaved(b);
         setName(b.name);
         setLogo(b.logo);
+        setColor(b.color || DEFAULT_BRAND_COLOR);
       })
       .catch(() => toast.error("Could not load the brand settings"));
   }, []);
@@ -51,7 +87,14 @@ export function BrandSettings() {
       setLogo(url);
       setFileInfo({ name: f.name, size: f.size });
       const img = new Image();
-      img.onload = () => setFileInfo({ name: f.name, size: f.size, w: img.naturalWidth, h: img.naturalHeight });
+      img.onload = () => {
+        setFileInfo({ name: f.name, size: f.size, w: img.naturalWidth, h: img.naturalHeight });
+        const c = logoColor(img);
+        if (c) {
+          setColor(c);
+          toast.info("Brand colour taken from the logo", { description: "Buttons and highlights will use it. Change it below if you like." });
+        }
+      };
       img.src = url;
     };
     reader.readAsDataURL(f);
@@ -66,6 +109,7 @@ export function BrandSettings() {
       setSaved(json);
       setName(json.name);
       setLogo(json.logo);
+      setColor(json.color || DEFAULT_BRAND_COLOR);
       setFileInfo(null);
       setJustSaved(true);
       setTimeout(() => setJustSaved(false), 4000);
@@ -89,7 +133,8 @@ export function BrandSettings() {
 
   const trimmed = name.trim();
   const nameOk = trimmed.length >= 2 && trimmed.length <= 40;
-  const dirty = trimmed !== saved.name || logo !== saved.logo;
+  const dirty = trimmed !== saved.name || logo !== saved.logo || color.toLowerCase() !== (saved.color || DEFAULT_BRAND_COLOR).toLowerCase();
+  const accent = brandAccent(color);
   const preview = logo || DEFAULT_LOGO;
   const savedAt = saved.updatedAt ? new Date(saved.updatedAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" }) : null;
   const wide = fileInfo?.w && fileInfo?.h ? fileInfo.w / fileInfo.h : null;
@@ -191,8 +236,43 @@ export function BrandSettings() {
             {!logo && saved.logo && <p className="text-[11px] text-muted-foreground">Removed. Save to go back to the BrandFly logo.</p>}
           </div>
 
+          <div className="space-y-2">
+            <Label>Brand colour</Label>
+            <div className="flex flex-wrap items-center gap-2">
+              <input type="color" value={color} onChange={(e) => setColor(e.target.value)} aria-label="Brand colour" className="h-9 w-12 cursor-pointer rounded-md border border-border bg-card p-1" />
+              <Input value={color} onChange={(e) => /^#[0-9a-fA-F]{0,6}$/.test(e.target.value) && setColor(e.target.value)} className="h-9 w-28 font-mono text-xs" aria-label="Brand colour hex" />
+              {logo && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    const img = new Image();
+                    img.onload = () => {
+                      const c = logoColor(img);
+                      if (c) setColor(c);
+                      else toast.info("This logo has no clear colour; pick one yourself.");
+                    };
+                    img.src = logo;
+                  }}
+                >
+                  Take from logo
+                </Button>
+              )}
+              <Button type="button" size="sm" variant="ghost" onClick={() => setColor(DEFAULT_BRAND_COLOR)}>
+                BrandFly blue
+              </Button>
+              <span className="inline-flex h-9 items-center rounded-md px-3 text-xs font-semibold text-white" style={{ background: accent }}>
+                Launch
+              </span>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Used for every button, link and highlight, including the login page.{accent !== color.toLowerCase() && " A slightly darker shade is used so white text stays readable."}
+            </p>
+          </div>
+
           <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
-            <Button onClick={() => put({ name: trimmed, logo }, "Brand saved. The sidebar shows it now.")} disabled={!dirty || busy || !nameOk}>
+            <Button onClick={() => put({ name: trimmed, logo, color: /^#[0-9a-fA-F]{6}$/.test(color) ? color : DEFAULT_BRAND_COLOR }, "Brand saved. Logo and colours are updated everywhere.")} disabled={!dirty || busy || !nameOk}>
               {busy ? <Loader2 className="animate-spin" /> : <Save />}
               Save changes
             </Button>
@@ -202,6 +282,7 @@ export function BrandSettings() {
               onClick={() => {
                 setName(saved.name);
                 setLogo(saved.logo);
+                setColor(saved.color || DEFAULT_BRAND_COLOR);
                 setFileInfo(null);
               }}
             >

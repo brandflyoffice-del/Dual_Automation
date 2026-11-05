@@ -1,33 +1,25 @@
 // Server-only: sends in-thread replies straight through the sending mailbox's SMTP server (instant, and we set the
 // In-Reply-To / References headers ourselves, so Gmail and Outlook keep the answer inside the prospect's thread).
-// Mailboxes come from MAILBOXES in the n8n config file (filled from Smartlead by scripts/sync-mailboxes.mjs).
+// Mailboxes come from the mailboxes table (src/lib/mailboxes.ts): added in the dashboard or synced from Smartlead.
 // When a mailbox has no SMTP login here, or SMTP fails, the reply goes through Smartlead's reply-email-thread instead.
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import nodemailer from "nodemailer";
 import MailComposer from "nodemailer/lib/mail-composer";
 import { ImapFlow } from "imapflow";
 import { replyInThread } from "@/lib/smartlead";
+import { listMailboxCreds, type MailboxCreds } from "@/lib/mailboxes";
 
-type Mailbox = {
-  email: string;
-  name: string;
-  smtp: { host: string; port: number; secure: boolean; user: string; password: string };
-  imap?: { host: string; port: number; secure: boolean; user: string; password: string };
-};
+type Mailbox = MailboxCreds;
 
 let cached: { at: number; list: Mailbox[] } | null = null;
-export function mailboxes(): Mailbox[] {
+export async function mailboxes(): Promise<Mailbox[]> {
   if (cached && Date.now() - cached.at < 60_000) return cached.list;
-  let list: Mailbox[] = [];
-  try {
-    const cfg = JSON.parse(readFileSync(join(process.cwd(), "n8n", "config.local.json"), "utf8")) as { MAILBOXES?: Mailbox[] };
-    list = (cfg.MAILBOXES ?? []).filter((m) => m?.email && m.smtp?.host && m.smtp.user && m.smtp.password);
-  } catch {
-    list = [];
-  }
+  const list = (await listMailboxCreds().catch(() => [])).filter((m) => m.smtp.host && m.smtp.user && m.smtp.password);
   cached = { at: Date.now(), list };
   return list;
+}
+export function dropMailboxCache() {
+  cached = null;
+  transports.clear();
 }
 
 const transports = new Map<string, nodemailer.Transporter>();
@@ -98,7 +90,7 @@ export type SendResult = { ok: true; via: "smtp" | "smartlead"; messageId: strin
 const reSubject = (s: string) => (/^\s*re\s*:/i.test(s) ? s.trim() : `Re: ${s.trim()}`);
 
 export async function sendReply(mail: ReplyMail): Promise<SendResult> {
-  const list = mailboxes();
+  const list = await mailboxes();
   const box = list.find((m) => m.email.toLowerCase() === String(mail.mailbox ?? "").toLowerCase()) ?? (mail.mailbox ? undefined : list[0]);
   const inReplyTo = (String(mail.inReplyTo).match(ID_RE) ?? [])[0] ?? "";
   const refs = [...new Set([...(mail.references ?? []).flatMap((r) => String(r).match(ID_RE) ?? []), inReplyTo].filter(Boolean))].slice(-12);

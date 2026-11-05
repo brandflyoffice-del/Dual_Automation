@@ -5,11 +5,31 @@ import { DEFAULT_SERVICE_LINES as SHARED_SERVICE_LINES } from "../../n8n/service
 export type SubService = { name: string; signals: string; deliver?: string };
 /** A service line = one thing the client sells, mapped to the Smartlead campaign that emails it. */
 export type ServiceLine = { id: string; name: string; campaignId: string; hint: string; items: SubService[] };
-export type BrandSettings = { name: string; logo: string | null };
+/** color = the brand accent (buttons, links, highlights); taken from the logo, editable in Settings. */
+export type BrandSettings = { name: string; logo: string | null; color?: string | null };
 export type ReplyPromptSettings = { prompt: string; startingPrice: string };
 export type MeetingAlerts = { emails: string[] };
 
-export const DEFAULT_BRAND: BrandSettings = { name: "BrandFly", logo: null };
+/** BrandFly blue, measured from the built-in logo. */
+export const DEFAULT_BRAND_COLOR = "#0B5A94";
+export const DEFAULT_BRAND: BrandSettings = { name: "BrandFly", logo: null, color: DEFAULT_BRAND_COLOR };
+export const HEX_RE = /^#[0-9a-f]{6}$/i;
+
+const lum = (hex: string) => {
+  const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+};
+/**
+ * The accent the dashboard uses for a brand colour: the colour itself, darkened step by step until white text on it
+ * is readable (contrast 3.5:1 or better), so a light logo colour (yellow, sky blue) still gives usable buttons.
+ */
+export function brandAccent(hex: string | null | undefined): string {
+  let h = hex && HEX_RE.test(hex) ? hex.toLowerCase() : DEFAULT_BRAND_COLOR.toLowerCase();
+  for (let i = 0; i < 20 && 1.05 / (lum(h) + 0.05) < 3.5; i++) {
+    h = "#" + [1, 3, 5].map((k) => Math.round(parseInt(h.slice(k, k + 2), 16) * 0.9).toString(16).padStart(2, "0")).join("");
+  }
+  return h;
+}
 export const DEFAULT_MEETING_ALERTS: MeetingAlerts = { emails: [] };
 
 export const PRICE_RE = /^\$\d{1,3}(,?\d{3})*(\.\d{2})?$/;

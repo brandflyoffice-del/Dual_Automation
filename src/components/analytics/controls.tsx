@@ -133,3 +133,158 @@ export function ToolLinks({ links }: { links: { label: string; href: string }[] 
     </div>
   );
 }
+
+const PRESETS = [
+  { id: "same", label: "Same server as my mailboxes", smtpHost: "smtp.yearncliff.com", smtpPort: 465, imapHost: "imap.yearncliff.com", imapPort: 993 },
+  { id: "google", label: "Google Workspace (app password)", smtpHost: "smtp.gmail.com", smtpPort: 465, imapHost: "imap.gmail.com", imapPort: 993 },
+  { id: "microsoft", label: "Microsoft 365", smtpHost: "smtp.office365.com", smtpPort: 587, imapHost: "outlook.office365.com", imapPort: 993 },
+  { id: "zoho", label: "Zoho Mail", smtpHost: "smtp.zoho.com", smtpPort: 465, imapHost: "imap.zoho.com", imapPort: 993 },
+];
+
+/** Add a sending mailbox (SMTP/IMAP) from the dashboard: created in Smartlead with warm-up, then watched for replies. */
+export function AddMailbox() {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [f, setF] = useState({
+    fromName: "",
+    fromEmail: "",
+    username: "",
+    password: "",
+    smtpHost: PRESETS[0].smtpHost,
+    smtpPort: String(PRESETS[0].smtpPort),
+    imapHost: PRESETS[0].imapHost,
+    imapPort: String(PRESETS[0].imapPort),
+    dailyLimit: "20",
+    warmup: true,
+  });
+  const set = (k: keyof typeof f, v: string | boolean) => setF((p) => ({ ...p, [k]: v }));
+  const field = "mt-0.5 h-8 w-full rounded-md border border-border bg-card px-2.5 text-[13px] outline-none focus:border-emerald/60";
+
+  async function submit() {
+    setBusy(true);
+    const { ok, j } = await post("/api/mailboxes", {
+      ...f,
+      smtpPort: Number(f.smtpPort),
+      imapPort: Number(f.imapPort),
+      dailyLimit: Number(f.dailyLimit) || 20,
+      username: f.username || undefined,
+    });
+    setBusy(false);
+    if (ok) {
+      toast.success("Mailbox added", { description: `${f.fromEmail} is in Smartlead (warm-up ${f.warmup ? "on" : "off"}); replies to it are answered within seconds.` });
+      setOpen(false);
+      router.refresh();
+    } else toast.error("Mailbox not added", { description: j?.error || "Check the email, password and server settings." });
+  }
+
+  return (
+    <>
+      <Button size="xs" variant="default" onClick={() => setOpen(true)}>
+        + Add mailbox
+      </Button>
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-3" onClick={() => !busy && setOpen(false)}>
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-border bg-card p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-1 text-base font-semibold">Add a sending mailbox</div>
+            <p className="mb-3 text-[12px] text-muted-foreground">
+              For mailboxes with a password or app password (SMTP/IMAP). Gmail or Outlook mailboxes connected with &quot;Sign in with Google/Microsoft&quot; are
+              added in Smartlead, then use <b>Sync from Smartlead</b>.
+            </p>
+            <div className="mb-3 flex flex-wrap gap-1">
+              {PRESETS.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setF((o) => ({ ...o, smtpHost: p.smtpHost, smtpPort: String(p.smtpPort), imapHost: p.imapHost, imapPort: String(p.imapPort) }))}
+                  className={cn(
+                    "rounded-full border px-2.5 py-1 text-[11px]",
+                    f.smtpHost === p.smtpHost ? "border-emerald/40 bg-emerald/10 font-medium text-emerald" : "border-border text-muted-foreground",
+                  )}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-[12px]">
+              <label className="col-span-2">
+                Sender name
+                <input className={field} value={f.fromName} onChange={(e) => set("fromName", e.target.value)} placeholder="Jay Tap" />
+              </label>
+              <label className="col-span-2">
+                Email address
+                <input className={field} value={f.fromEmail} onChange={(e) => set("fromEmail", e.target.value)} placeholder="jay@yourdomain.com" />
+              </label>
+              <label className="col-span-2">
+                Password or app password
+                <input className={field} type="password" value={f.password} onChange={(e) => set("password", e.target.value)} />
+              </label>
+              <label className="col-span-2">
+                Login username (if not the email)
+                <input className={field} value={f.username} onChange={(e) => set("username", e.target.value)} placeholder="usually the email address" />
+              </label>
+              <label>
+                SMTP server
+                <input className={field} value={f.smtpHost} onChange={(e) => set("smtpHost", e.target.value)} />
+              </label>
+              <label>
+                SMTP port
+                <input className={field} inputMode="numeric" value={f.smtpPort} onChange={(e) => set("smtpPort", e.target.value)} />
+              </label>
+              <label>
+                IMAP server
+                <input className={field} value={f.imapHost} onChange={(e) => set("imapHost", e.target.value)} />
+              </label>
+              <label>
+                IMAP port
+                <input className={field} inputMode="numeric" value={f.imapPort} onChange={(e) => set("imapPort", e.target.value)} />
+              </label>
+              <label>
+                Emails per day
+                <input className={field} inputMode="numeric" value={f.dailyLimit} onChange={(e) => set("dailyLimit", e.target.value)} />
+              </label>
+              <label className="flex items-end gap-2 pb-1.5">
+                <input type="checkbox" checked={f.warmup} onChange={(e) => set("warmup", e.target.checked)} className="size-4 accent-[var(--emerald)]" /> Start warm-up
+              </label>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button size="sm" variant="ghost" onClick={() => setOpen(false)} disabled={busy}>
+                Cancel
+              </Button>
+              <Button size="sm" onClick={submit} disabled={busy || !f.fromEmail.includes("@") || f.password.length < 4 || f.fromName.trim().length < 2}>
+                {busy ? <Loader2 className="size-3.5 animate-spin" /> : null} Add mailbox
+              </Button>
+            </div>
+            <p className="mt-2 text-[11px] text-muted-foreground">Smartlead tests the login before saving. The password is stored encrypted.</p>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+export function SyncMailboxes() {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  return (
+    <Button
+      size="xs"
+      variant="outline"
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        const r = await fetch("/api/mailboxes/sync", { method: "POST" }).catch(() => null);
+        const j = (await r?.json().catch(() => null)) as { imported?: number; skipped?: string[]; error?: string } | null;
+        setBusy(false);
+        if (r?.ok) {
+          toast.success(`${j?.imported ?? 0} mailboxes synced from Smartlead`, {
+            description: j?.skipped?.length ? `Not importable: ${j.skipped.join(", ")}` : "They are used for answers and watched for replies.",
+          });
+        } else toast.error("Sync failed", { description: j?.error || "Try again" });
+        router.refresh();
+      }}
+    >
+      {busy ? <Loader2 className="size-3 animate-spin" /> : null} Sync from Smartlead
+    </Button>
+  );
+}

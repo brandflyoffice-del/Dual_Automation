@@ -10,7 +10,7 @@ import { db } from "@/lib/db";
 import { campaignStats, dayWiseStats, listCampaigns, listMailboxes, smartleadConfigured, type SlCampaignStats, type SlDay, type SlMailbox } from "@/lib/smartlead";
 import { cn, formatPct, safePct } from "@/lib/utils";
 import { config } from "@/lib/config";
-import { CampaignSendingButton, SendingSwitch, ToolLinks, WarmupButton } from "@/components/analytics/controls";
+import { AddMailbox, CampaignSendingButton, SendingSwitch, SyncMailboxes, ToolLinks, WarmupButton } from "@/components/analytics/controls";
 
 export const dynamic = "force-dynamic";
 
@@ -277,7 +277,11 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <CardTitle>Sending mailboxes</CardTitle>
-            <WarmupButton on />
+            <div className="flex flex-wrap gap-1.5">
+              <AddMailbox />
+              <SyncMailboxes />
+              <WarmupButton on />
+            </div>
           </div>
           <CardDescription>
             {data?.mailboxes.length ?? 0} connected · {sentToday} of {capacity} emails sent today. Warm-up keeps new mailboxes out of spam; leave it on.

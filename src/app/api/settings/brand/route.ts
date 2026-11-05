@@ -21,6 +21,7 @@ const body = z.union([
       .max(MAX_LOGO_CHARS)
       .regex(/^data:image\/(png|jpeg|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/)
       .nullable(),
+    color: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional(),
   }),
 ]);
 

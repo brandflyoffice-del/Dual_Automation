@@ -109,7 +109,7 @@ function Toggle({ on, children, onClick, title }: { on: boolean; children: React
       onClick={onClick}
       className={cn(
         "inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
-        on ? "border-emerald/40 bg-emerald/10 text-emerald-800" : "border-border bg-card text-muted-foreground hover:border-foreground/25 hover:text-foreground",
+        on ? "border-emerald/40 bg-emerald/10 text-emerald" : "border-border bg-card text-muted-foreground hover:border-foreground/25 hover:text-foreground",
       )}
     >
       {on && <Check className="size-3" />}
@@ -900,7 +900,7 @@ export function LaunchCampaign({ className, compact = false }: { className?: str
                       provider === p.id ? "border-emerald bg-emerald/[0.07] ring-1 ring-emerald/30" : "border-border hover:bg-foreground/[0.03]",
                     )}
                   >
-                    <span className={cn("block text-sm font-semibold", provider === p.id ? "text-emerald-800" : "text-foreground")}>{p.label}</span>
+                    <span className={cn("block text-sm font-semibold", provider === p.id ? "text-emerald" : "text-foreground")}>{p.label}</span>
                     <span className="block text-[11px] text-muted-foreground">{p.id === "apify" ? "Pay per lead, cheapest" : "Credits, mailbox-checked"}</span>
                   </button>
                 ))}

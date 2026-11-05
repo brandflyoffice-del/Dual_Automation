@@ -63,7 +63,7 @@ export function LoginForm({ next, configured }: { next: string; configured: bool
         </div>
       </div>
       <label className="flex cursor-pointer select-none items-center gap-2 text-[13px] text-muted-foreground">
-        <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="size-4 accent-emerald-600" />
+        <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="size-4 accent-[var(--emerald)]" />
         Keep me signed in for 30 days
       </label>
       {error && (

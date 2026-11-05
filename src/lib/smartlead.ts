@@ -331,3 +331,17 @@ export async function setSending(campaignId: string, on: boolean): Promise<{ att
   dropCache(`analytics:${campaignId}`);
   return { attached };
 }
+
+// ---------- mailbox accounts (raw rows include logins; only src/lib/mailboxes.ts may use these) ----------
+
+export function rawEmailAccounts(): Promise<Record<string, unknown>[]> {
+  return sl<Record<string, unknown>[]>("GET", "/email-accounts/?offset=0&limit=100").then((r) => (Array.isArray(r) ? r : []));
+}
+
+/** Creates (or, with id, updates) an SMTP/IMAP mailbox in Smartlead. Smartlead tests both logins and refuses bad ones. */
+export async function saveEmailAccount(body: Record<string, unknown>): Promise<{ id: string | null; message: string }> {
+  const r = await sl<Record<string, unknown>>("POST", "/email-accounts/save", body);
+  dropCache("mailboxes");
+  const id = (r && (r.emailAccountId ?? r.id ?? (r.data as Record<string, unknown> | undefined)?.id)) as string | number | undefined;
+  return { id: id != null ? String(id) : null, message: String((r && (r.message as string)) || "saved") };
+}
