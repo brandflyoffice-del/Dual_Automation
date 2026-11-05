@@ -25,6 +25,7 @@ model Lead {
   country             String
   region              String // US | UK | EUROPE | UAE
   timezone            String? // IANA zone of the prospect (from city/state, else country); time buttons use it
+  phone               String? // E.164 mobile from Apify (numbering-plan checked in n8n); for the client's own calls, never used in emails
   industry            String // ECOMMERCE_RETAIL | FINTECH | REAL_ESTATE_LOGISTICS | EDTECH | HOSPITALITY
   employeeCount       Int?     @map("employee_count")
   annualRevenue       Int      @map("annual_revenue") // USD, $100k – $10M ICP window
@@ -155,6 +156,7 @@ model LaunchRun {
   passed     Int       @default(0)
   writing    Int       @default(0)
   qualified  Int       @default(0)
+  removed    Int       @default(0) // leads dropped because their email domain cannot receive mail
   status     String    @default("running") // running | done | failed
   message    String    @default("")
   startedAt  DateTime  @default(now()) @map("started_at") @db.Timestamptz

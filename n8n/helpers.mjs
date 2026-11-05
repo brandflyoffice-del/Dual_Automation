@@ -90,3 +90,47 @@ function pageButton(href, text) {
   return '<a href="' + escHtml(href) + '" style="display:inline-block;background:#4f46e5;color:#fff;padding:11px 18px;border-radius:8px;text-decoration:none;font-weight:600">' + escHtml(text) + '</a>';
 }
 `;
+
+/**
+ * Phone check for the lead's mobile number (Apify "Add mobile phone numbers"). Offline, numbering-plan level: the
+ * number must have a known country code, the right length for that country and, for US/Canada, a real area code and
+ * exchange (no 0/1 start, no N11, no fictional 555-01xx). Returns E.164 ("+14155550123") or null.
+ * It cannot prove a number still rings; Apify supplies numbers verified when collected.
+ */
+export const PHONE_JS = String.raw`
+const PHONE_DIAL = { us: '1', ca: '1', gb: '44', ae: '971', de: '49', fr: '33', es: '34', it: '39', nl: '31', be: '32', ch: '41', at: '43', se: '46', no: '47', dk: '45', fi: '358', ie: '353', pt: '351', pl: '48', au: '61', nz: '64', in: '91', sg: '65', za: '27', il: '972', sa: '966', qa: '974', lu: '352', cz: '420', gr: '30' };
+// Digits after the country code (min, max) per numbering plan.
+const PHONE_NSN = { '1': [10, 10], '44': [9, 10], '971': [8, 9], '49': [6, 13], '33': [9, 9], '34': [9, 9], '39': [6, 11], '31': [9, 9], '32': [8, 9], '41': [9, 9], '43': [4, 13], '46': [7, 10], '47': [8, 8], '45': [8, 8], '358': [5, 12], '353': [7, 9], '351': [9, 9], '48': [9, 9], '61': [9, 9], '64': [8, 10], '91': [10, 10], '65': [8, 8], '27': [9, 9], '972': [8, 9], '966': [9, 9], '974': [8, 8], '352': [4, 11], '420': [9, 9], '30': [10, 10] };
+const PHONE_CODES = Object.keys(PHONE_NSN).sort((a, b) => b.length - a.length);
+function cleanPhone(raw, countryCode) {
+  let s = String(raw == null ? '' : raw).trim().replace(/\s*(?:ext\.?|extension|x|#)\s*\d{1,6}$/i, '');
+  if (!s || /[a-wyz]/i.test(s)) return null;
+  const intl = /^(\+|00)/.test(s);
+  let d = s.replace(/\D/g, '');
+  if (s.startsWith('00')) d = d.slice(2);
+  let cc = null, nsn = '';
+  if (intl) {
+    cc = PHONE_CODES.find(c => d.startsWith(c)) || null;
+    if (!cc) return d.length >= 8 && d.length <= 15 && !/^(\d)\1+$/.test(d) ? '+' + d : null; // a country we have no plan for
+    nsn = d.slice(cc.length);
+  } else {
+    cc = PHONE_DIAL[String(countryCode || '').toLowerCase()] || null;
+    if (!cc) return null;
+    nsn = d;
+    if (cc === '1' && nsn.length === 11 && nsn[0] === '1') nsn = nsn.slice(1);
+    else if (nsn.startsWith(cc) && nsn.length > PHONE_NSN[cc][1]) nsn = nsn.slice(cc.length);
+    if (cc !== '39' && nsn[0] === '0') nsn = nsn.slice(1); // national trunk prefix
+  }
+  if (cc !== '39' && nsn[0] === '0') nsn = nsn.slice(1); // "+44 (0)7700..." style
+  const [min, max] = PHONE_NSN[cc];
+  if (nsn.length < min || nsn.length > max) return null;
+  if (/^(\d)\1+$/.test(nsn) || '01234567890123'.includes(nsn) || '98765432109876'.includes(nsn)) return null;
+  if (cc === '1') {
+    if (!/^[2-9]\d{2}[2-9]\d{6}$/.test(nsn)) return null;
+    const area = nsn.slice(0, 3), exch = nsn.slice(3, 6);
+    if (/^[2-9]11$/.test(area) || /^[2-9]11$/.test(exch) || area[1] === '9') return null;
+    if (exch === '555' && /^01\d\d$/.test(nsn.slice(6))) return null; // reserved for films and examples
+  }
+  return '+' + cc + nsn;
+}
+`;

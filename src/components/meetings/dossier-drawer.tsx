@@ -14,6 +14,7 @@ import {
   Loader2,
   Mail,
   MailOpen,
+  Phone,
   Video,
   XCircle,
 } from "lucide-react";
@@ -24,7 +25,7 @@ import { Textarea } from "@/components/ui/input";
 import { PainTag, RegionBadge, ScoreChip, ServiceBadge } from "@/components/badges";
 import { OutcomeSelect } from "./outcome-select";
 import { CountdownBadge } from "./countdown";
-import { formatDateTime, formatIst, formatRevenueBand, formatUsd, cn } from "@/lib/utils";
+import { formatDateTime, formatIst, formatPhone, formatRevenueBand, formatUsd, cn } from "@/lib/utils";
 import { INDUSTRY_LABEL, REGION_META, SERVICE_META, type Industry, type MeetingStatus, type Region, type Service } from "@/lib/constants";
 import type { MeetingRow } from "@/lib/types";
 
@@ -163,6 +164,13 @@ function DrawerBody({
             <Button asChild variant="outline" size="icon" title="Open in Google Calendar">
               <a href={m.calendarEventUrl} target="_blank" rel="noreferrer" aria-label="Open in Google Calendar">
                 <ExternalLink />
+              </a>
+            </Button>
+          )}
+          {m.phone && (
+            <Button asChild variant="outline" size="icon" title={`Mobile ${formatPhone(m.phone)}`}>
+              <a href={`tel:${m.phone}`} aria-label={`Mobile ${formatPhone(m.phone)}`}>
+                <Phone />
               </a>
             </Button>
           )}

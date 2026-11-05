@@ -2,6 +2,7 @@ import { Workflow, webhook, respond, ifNode, http, code, postgres, noop, sticky,
 import { QUALIFY_AND_SEQUENCE_SYSTEM, EMAIL_RULES_JS } from "./prompts.mjs";
 import { DEFAULT_SERVICE_LINES, DEFAULT_DELIVER, BRAND_FACTS } from "./services.mjs";
 import { COUNTRIES, EMPLOYEE_BUCKETS, EUROPE_CORE, ROLE_CATALOG, TZ_FROM_LOCATION_JS } from "./targeting.mjs";
+import { PHONE_JS } from "./helpers.mjs";
 
 // Shared lists baked into the Code nodes (same lists the dashboard Launch form uses).
 const TARGETING_JS =
@@ -154,7 +155,7 @@ const apifyInput = {
   jobTitles: [...new Set(roles.map(r => ROLE_TITLES[r][0]).concat(String(body.extraTitles || '').split(/[,;\n]/).map(s => s.trim()).filter(Boolean)))].filter(t => t.length >= 3 && t.length <= 64).slice(0, 10),
   titleMatch: 'word',
   emailType: body.emailType === 'any' ? 'any' : 'work',
-  includePhones: false,
+  includePhones: true, // verified mobile when Apify has one (about 1 in 4 US leads); shown in the dashboard only, never emailed
   companySizeMin: sizeMin,
   companySizeMax: sizeMax,
   maxResults: limit,
@@ -250,7 +251,7 @@ return leads.slice(0, ctx.limit).map(r => ({ json: { apify: r } }));
     w,
     "Normalize + ICP Hard Filter",
     [7, 0],
-    TARGETING_JS + String.raw`
+    TARGETING_JS + PHONE_JS + String.raw`
 const ctx = $('Build ICP Query').first().json.ctx;
 // Country name -> dashboard region (US/UK/EUROPE/UAE, everything else OTHER). Region filters still use only the 15 core European countries.
 const NAME_TO_REGION = {};
@@ -303,7 +304,7 @@ const pushLead = (lead) => {
     linkedinUrl: lead.linkedinUrl || null,
     companyName: lead.companyName || domain, companyDomain: domain, companyWebsite: 'https://' + domain,
     country: lead.country, region: region || 'OTHER', industry, timezone: tzFor(lead.location, lead.country) || null,
-    employeeCount: employees || null, annualRevenue: annual || null, sourceId: lead.sourceId || null,
+    employeeCount: employees || null, annualRevenue: annual || null, sourceId: lead.sourceId || null, phone: lead.phone || null,
     leadSource: ctx.provider || 'ai-ark',
     headline: String(lead.headline || '').slice(0, 200), companyAbout: String(lead.about || '').replace(/\s+/g, ' ').slice(0, 600),
     preverified: true, emailStatus: 'VALID',
@@ -324,7 +325,9 @@ for (const it of $input.all()) {
     const personal = a.emailType === 'personal' || /@(gmail|googlemail|yahoo|hotmail|outlook|live|icloud|aol)\./i.test(email);
     if (ctx.emailType !== 'any' && personal) continue;
     const country = CODE_TO_COUNTRY[String(a.countryCode || '').toLowerCase()] || String(a.country || '').trim();
-    pushLead({
+    // First number that passes the numbering-plan check (country code, length, real US area code); junk is dropped.
+    const phone = [a.phone].concat(Array.isArray(a.phones) ? a.phones : []).map(x => cleanPhone(x && typeof x === 'object' ? (x.number || x.phone) : x, a.countryCode)).find(Boolean) || null;
+    pushLead({ phone,
       email, firstName: a.firstName || '', lastName: a.lastName || '', role: a.jobTitle || a.primaryTitle || '',
       linkedinUrl: a.linkedinUrl || null, companyName: a.companyName || '', domain: a.companyDomain || '',
       country, employeeCount: staffCount(a.companySize), annualRevenue: 0, sourceId: a.personId || null,
@@ -661,7 +664,7 @@ for (let i = 0; i < llmItems.length; i++) await (async (it, i) => {
       settings: { ignore_global_block_list: false, ignore_unsubscribe_list: false, ignore_duplicate_leads_in_other_campaign: true } },
     record: {
       email: lead.email, emailStatus: 'VALID', firstName: lead.firstName, lastName: lead.lastName, role: lead.role, linkedinUrl: lead.linkedinUrl,
-      companyName: lead.companyName, companyDomain: lead.companyDomain, companyWebsite: lead.companyWebsite, country: lead.country, region: lead.region, timezone: lead.timezone || null,
+      companyName: lead.companyName, companyDomain: lead.companyDomain, companyWebsite: lead.companyWebsite, country: lead.country, region: lead.region, timezone: lead.timezone || null, phone: lead.phone || null,
       industry: lead.industry, employeeCount: lead.employeeCount, annualRevenue: lead.annualRevenue, painPoint: ai.pain_point_tag, painPointDetail: ai.pain_point_detail,
       auditFindings: lead.auditFindings, recommendedService: serviceName, qualificationScore: Math.max(0, Math.min(100, Math.round(ai.qualification_score || 0))),
       estimatedTicket: ticket, dossier: { summary: ai.dossier_summary, business: ai.business_summary && ai.business_summary !== 'unknown' ? ai.business_summary : null, opportunity: ai.opportunity_reason || ai.pain_point_detail, discoveryQuestions: ai.discovery_questions, talkingPoints: ai.talking_points,
@@ -699,10 +702,10 @@ return $input.all().map((it, i) => ({ json: { record: { ...src[i].json.record, o
     `WITH r AS (SELECT $1::jsonb AS d),
 l AS (
   INSERT INTO leads (email, email_status, first_name, last_name, role, linkedin_url, company_name, company_domain, company_website,
-    country, region, timezone, industry, employee_count, annual_revenue, pain_point, pain_point_detail, audit_findings, recommended_service,
+    country, region, timezone, phone, industry, employee_count, annual_revenue, pain_point, pain_point_detail, audit_findings, recommended_service,
     qualification_score, estimated_ticket, dossier, stage, current_step, outreach_lead_id, campaign_id, source, updated_at)
   SELECT lower(d->>'email'), d->>'emailStatus', d->>'firstName', coalesce(d->>'lastName',''), d->>'role', d->>'linkedinUrl',
-    d->>'companyName', d->>'companyDomain', d->>'companyWebsite', d->>'country', d->>'region', nullif(d->>'timezone', ''), d->>'industry',
+    d->>'companyName', d->>'companyDomain', d->>'companyWebsite', d->>'country', d->>'region', nullif(d->>'timezone', ''), nullif(d->>'phone', ''), d->>'industry',
     nullif(d->>'employeeCount','')::int, COALESCE(NULLIF(d->>'annualRevenue','')::int, 0), d->>'painPoint', d->>'painPointDetail', d->'auditFindings',
     d->>'recommendedService', (d->>'qualificationScore')::int, (d->>'estimatedTicket')::int, d->'dossier', 'VERIFIED', 0,
     d->>'outreachLeadId', d->>'campaignId', coalesce(d->>'leadSource','ai-ark'), now()
@@ -710,7 +713,7 @@ l AS (
   ON CONFLICT (email) DO UPDATE SET
     pain_point = EXCLUDED.pain_point, pain_point_detail = EXCLUDED.pain_point_detail, audit_findings = EXCLUDED.audit_findings,
     recommended_service = EXCLUDED.recommended_service, qualification_score = EXCLUDED.qualification_score,
-    estimated_ticket = EXCLUDED.estimated_ticket, dossier = EXCLUDED.dossier, timezone = coalesce(EXCLUDED.timezone, leads.timezone),
+    estimated_ticket = EXCLUDED.estimated_ticket, dossier = EXCLUDED.dossier, timezone = coalesce(EXCLUDED.timezone, leads.timezone), phone = coalesce(EXCLUDED.phone, leads.phone),
     outreach_lead_id = coalesce(EXCLUDED.outreach_lead_id, leads.outreach_lead_id), updated_at = now()
   RETURNING id
 ),
@@ -750,7 +753,30 @@ return [{ json: { event: 'batch_finished', ingest: false, data: { runId: ctx.run
   dashboardNotify(w, "Dashboard: Batch Finished", [24, 0], "={{ JSON.stringify($json) }}");
 
   ifNode(w, "AI Ark Already Verified?", [10.5, 0], "={{ $json.preverified === true }}");
-  code(w, "Keep Preverified Email", [11.5, -1], "return $input.all().map(i => ({ json: i.json }));");
+  // Drops a lead whose email domain cannot receive mail: the domain no longer exists, has no mail server, or publishes a
+  // "null MX" that refuses all mail. Those emails would bounce and hurt the warming mailboxes (Apify's "VALID" can be
+  // stale). One DNS-over-HTTPS lookup per domain; a failed lookup keeps the lead (our network, not their domain).
+  code(
+    w,
+    "Keep Preverified Email",
+    [11.5, -1],
+    String.raw`
+const helpers = this.helpers;
+const leads = $input.all();
+const domains = [...new Set(leads.map(i => String(i.json.email || '').split('@')[1]).filter(Boolean).map(d => d.toLowerCase()))];
+const ok = {};
+await Promise.all(domains.map(async (d) => {
+  ok[d] = true;
+  try {
+    const r = await helpers.httpRequest({ method: 'GET', url: 'https://dns.google/resolve', qs: { name: d, type: 'MX' }, json: true, timeout: 8000 });
+    const mx = (r.Answer || []).filter(a => a.type === 15).map(a => String(a.data || '').trim());
+    if (r.Status === 3) ok[d] = false; // the domain does not exist
+    else if (r.Status === 0) ok[d] = mx.some(m => !/^\d+\s+\.$/.test(m)); // no mail server, or only a null MX
+  } catch (e) { /* lookup failed: keep */ }
+}));
+return leads.filter(i => ok[String(i.json.email || '').split('@')[1].toLowerCase()] !== false).map(i => ({ json: i.json }));
+`,
+  );
   w.add("Verified Emails", "n8n-nodes-base.merge", 3, [12.5, 0], { mode: "append" });
 
   /* ── live progress for the dashboard's Launch card (side branches: they never change the items of the main chain) ── */
@@ -762,7 +788,7 @@ return [{ json: { event: 'batch_finished', ingest: false, data: { runId: ctx.run
   progress("Progress: Searching", [1.5, -1.6], "Build ICP Query", "{ stage: 'searching' }");
   progress("Progress: Found (Apify)", [4, -1.6], "Split Apify Leads", "{ stage: 'filtering', found: $('Split Apify Leads').all().length }");
   progress("Progress: Found (AI Ark)", [4, 1.6], "Split AI Ark People", "{ stage: 'filtering', found: $('Split AI Ark People').all().length }");
-  progress("Progress: Checking Websites", [12.5, -1.6], "Verified Emails", "{ stage: 'checking', passed: $('Verified Emails').all().length }");
+  progress("Progress: Checking Websites", [12.5, -1.6], "Verified Emails", "{ stage: 'checking', passed: $('Verified Emails').all().length, removed: Math.max(0, $('Drop Existing Leads').all().length - $('Verified Emails').all().length) }");
   progress("Progress: Writing Emails", [14.5, -1.6], "Site Audit Extract", "{ stage: 'writing', writing: $('Site Audit Extract').all().length }");
   progress("Progress: Adding To Smartlead", [18.5, -1.6], "Qualified? (Ticket >= $1,000)", "{ stage: 'adding', qualified: $('Qualified? (Ticket >= $1,000)').all(0).length }");
 

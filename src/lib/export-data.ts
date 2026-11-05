@@ -2,6 +2,7 @@
 import { db } from "@/lib/db";
 import { INDUSTRY_LABEL, MEETING_STATUS_LABEL, OUTREACH_CAMPAIGNS, REGION_META, SENTIMENT_LABEL, SERVICE_META, STAGE_LABEL } from "@/lib/constants";
 import type { ExportTable } from "@/lib/export";
+import { formatPhone } from "@/lib/utils";
 
 export const DATASETS = {
   leads: { scopes: ["all", "contacted", "replied", "interested", "booked", "not_contacted"] },
@@ -54,6 +55,7 @@ async function leads(scope: string): Promise<ExportTable> {
       { key: "role", label: "Role" },
       { key: "company", label: "Company" },
       { key: "website", label: "Website" },
+      { key: "phone", label: "Mobile" },
       { key: "linkedin", label: "LinkedIn" },
       { key: "country", label: "Country" },
       { key: "region", label: "Region" },
@@ -83,6 +85,7 @@ async function leads(scope: string): Promise<ExportTable> {
         role: l.role,
         company: l.companyName,
         website: l.companyWebsite ?? "",
+        phone: l.phone ? formatPhone(l.phone) : "",
         linkedin: l.linkedinUrl ?? "",
         country: l.country,
         region: REGION_META[l.region as keyof typeof REGION_META]?.label ?? l.region,

@@ -18,6 +18,7 @@ type Run = {
   passed: number;
   writing: number;
   qualified: number;
+  removed?: number;
   added: number;
   status: "running" | "done" | "failed";
   message: string;
@@ -41,7 +42,10 @@ function steps(r: Run) {
   return [
     { label: `Searching ${via} for decision makers`, detail: r.found ? `${r.found} people found${r.target ? ` (target ${r.target})` : ""}` : `Target ${r.target} leads` },
     { label: "Filtering to your places, roles and sizes", detail: r.passed ? `${r.passed} passed` : r.found ? `Checking ${r.found} people` : "" },
-    { label: "Checking emails and websites", detail: r.writing ? `${r.writing} websites read` : r.passed ? `${r.passed} leads` : "" },
+    {
+      label: "Checking emails and websites",
+      detail: [r.writing ? `${r.writing} websites read` : r.passed ? `${r.passed} leads` : "", r.removed ? `${r.removed} removed: email domain does not accept mail` : ""].filter(Boolean).join(" · "),
+    },
     { label: "AI finding pain points and writing emails", detail: r.qualified ? `${r.qualified} qualified` : r.writing ? `${r.writing} leads` : "" },
     { label: "Adding to Smartlead and your dashboard", detail: r.added ? `${r.added} added` : r.qualified ? `${r.qualified} to add` : "" },
   ];

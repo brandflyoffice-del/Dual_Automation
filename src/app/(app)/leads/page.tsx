@@ -14,6 +14,7 @@ export default async function LeadsPage() {
     name: `${l.firstName} ${l.lastName}`.trim(),
     email: l.email,
     emailStatus: l.emailStatus,
+    phone: l.phone,
     role: l.role,
     company: l.companyName,
     website: l.companyWebsite,

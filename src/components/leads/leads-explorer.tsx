@@ -10,7 +10,7 @@ import {
   type ColumnDef,
   type SortingState,
 } from "@tanstack/react-table";
-import { AlertTriangle, ArrowUpDown, CheckCircle2, ChevronLeft, ChevronRight, Search, ShieldAlert, X } from "lucide-react";
+import { AlertTriangle, ArrowUpDown, CheckCircle2, ChevronLeft, ChevronRight, Phone, Search, ShieldAlert, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PainTag, RegionBadge, ScoreChip, SentimentBadge, ServiceBadge, StageBadge } from "@/components/badges";
 import { LaunchCampaign } from "@/components/launch-campaign";
 import { ICP, INDUSTRY_LABEL, LEAD_STAGES, REGION_META, STAGE_LABEL, type Industry } from "@/lib/constants";
-import { formatRevenueBand, formatUsd } from "@/lib/utils";
+import { formatPhone, formatRevenueBand, formatUsd } from "@/lib/utils";
 import type { LeadRow } from "@/lib/types";
 
 const REV_BANDS: Record<string, [number, number]> = {
@@ -78,7 +78,7 @@ export function LeadsExplorer({ leads }: { leads: LeadRow[] }) {
         (stage === "all" || l.stage === stage) &&
         l.revenue >= lo &&
         l.revenue < hi &&
-        (!needle || `${l.name} ${l.company} ${l.role} ${l.email} ${l.country}`.toLowerCase().includes(needle)),
+        (!needle || `${l.name} ${l.company} ${l.role} ${l.email} ${l.phone ?? ""} ${l.country}`.toLowerCase().includes(needle)),
     );
   }, [leads, q, region, industry, revenue, pain, stage]);
 
@@ -149,23 +149,32 @@ export function LeadsExplorer({ leads }: { leads: LeadRow[] }) {
         cell: ({ row }) => <span className="font-metric text-xs">{formatUsd(row.original.ticket)}+</span>,
       },
       {
-        id: "email",
+        id: "contact",
         accessorKey: "emailStatus",
-        header: "Email",
-        cell: ({ row: { original: l } }) =>
-          l.emailStatus === "VALID" ? (
-            <span className="inline-flex items-center gap-1 text-xs text-emerald">
-              <CheckCircle2 className="size-3.5" /> Verified
-            </span>
-          ) : l.emailStatus === "INVALID" ? (
-            <span className="inline-flex items-center gap-1 text-xs text-rose-600">
-              <ShieldAlert className="size-3.5" /> Invalid
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1 text-xs text-amber-700">
-              <AlertTriangle className="size-3.5" /> Pending
-            </span>
-          ),
+        header: "Contact",
+        cell: ({ row: { original: l } }) => (
+          <div className="min-w-[190px] space-y-1">
+            <div className="flex items-center gap-1 text-xs">
+              {l.emailStatus === "VALID" ? (
+                <CheckCircle2 className="size-3.5 shrink-0 text-emerald" aria-label="Verified email" />
+              ) : l.emailStatus === "INVALID" ? (
+                <ShieldAlert className="size-3.5 shrink-0 text-rose-600" aria-label="Invalid email" />
+              ) : (
+                <AlertTriangle className="size-3.5 shrink-0 text-amber-700" aria-label="Email not verified yet" />
+              )}
+              <span className="truncate" title={l.email}>
+                {l.email}
+              </span>
+            </div>
+            {l.phone ? (
+              <a href={`tel:${l.phone}`} className="inline-flex items-center gap-1 font-metric text-xs text-emerald hover:underline" title="Mobile number (verified by the lead source)">
+                <Phone className="size-3.5 shrink-0" /> {formatPhone(l.phone)}
+              </a>
+            ) : (
+              <div className="text-[11px] text-muted-foreground">No mobile found</div>
+            )}
+          </div>
+        ),
       },
       {
         id: "stage",

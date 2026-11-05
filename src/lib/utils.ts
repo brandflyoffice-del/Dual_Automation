@@ -6,6 +6,16 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/** "+14155550123" -> "+1 (415) 555-0123"; other countries "+44 7700 900123". */
+export function formatPhone(e164: string) {
+  const d = e164.replace(/\D/g, "");
+  if (d.length === 11 && d[0] === "1") return `+1 (${d.slice(1, 4)}) ${d.slice(4, 7)}-${d.slice(7)}`;
+  const cc = PHONE_CODES.find((c) => d.startsWith(c)) ?? d.slice(0, 2);
+  const rest = d.slice(cc.length);
+  return rest.length > 6 ? `+${cc} ${rest.slice(0, 4)} ${rest.slice(4)}` : `+${d}`;
+}
+const PHONE_CODES = ["358", "353", "351", "352", "420", "971", "972", "966", "974", "44", "49", "33", "34", "39", "31", "32", "41", "43", "46", "47", "45", "48", "61", "64", "91", "65", "27", "30"];
+
 export function formatUsd(n: number, compact = false) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",

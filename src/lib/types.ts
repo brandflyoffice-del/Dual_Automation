@@ -44,6 +44,7 @@ export type MeetingRow = {
   prospectName: string;
   email: string;
   role: string;
+  phone: string | null;
   linkedinUrl: string | null;
   company: string;
   website: string | null;
@@ -65,6 +66,7 @@ export type LeadRow = {
   name: string;
   email: string;
   emailStatus: string;
+  phone: string | null;
   role: string;
   company: string;
   website: string | null;

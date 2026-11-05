@@ -45,6 +45,7 @@ export default async function MeetingsPage({ searchParams }: { searchParams: Pro
       prospectName: `${l.firstName} ${l.lastName}`.trim(),
       email: l.email,
       role: l.role,
+      phone: l.phone,
       linkedinUrl: l.linkedinUrl,
       company: l.companyName,
       website: l.companyWebsite,
