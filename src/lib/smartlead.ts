@@ -300,7 +300,7 @@ export async function setWarmup(mailboxId: string, enabled: boolean): Promise<vo
   await sl("POST", `/email-accounts/${mailboxId}/warmup`, {
     warmup_enabled: enabled,
     total_warmup_per_day: num(w.warmup_max_count) || num(w.max_email_per_day) || 20,
-    daily_rampup: num(w.rampup_value) || 2,
+    daily_rampup: Math.max(5, num(w.rampup_value)), // Smartlead refuses less than 5
     reply_rate_percentage: num(w.reply_rate) || 30,
   });
   dropCache("mailboxes");
@@ -318,6 +318,20 @@ export async function campaignMailboxIds(campaignId: string): Promise<string[]> 
 export async function setSending(campaignId: string, on: boolean): Promise<{ attached: number }> {
   let attached = 0;
   if (on) {
+    // Smartlead cannot start a campaign without a sending window. Default: Mon-Fri 07:00-15:00 New York
+    // (12:00-20:00 UK), at most 20 new leads a day, 10 minutes between emails. Change it in Smartlead if needed.
+    const c = await sl<Record<string, unknown>>("GET", `/campaigns/${campaignId}`);
+    if (!c.scheduler_cron_value) {
+      await sl("POST", `/campaigns/${campaignId}/schedule`, {
+        timezone: "America/New_York",
+        days_of_the_week: [1, 2, 3, 4, 5],
+        start_hour: "07:00",
+        end_hour: "15:00",
+        min_time_btw_emails: 10,
+        max_new_leads_per_day: 20,
+        schedule_start_time: new Date().toISOString(),
+      });
+    }
     const current = await campaignMailboxIds(campaignId);
     if (!current.length) {
       const boxes = (await listMailboxes()).filter((m) => m.smtpOk && m.imapOk).map((m) => Number(m.id));
