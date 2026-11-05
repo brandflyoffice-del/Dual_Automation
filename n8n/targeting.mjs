@@ -105,3 +105,37 @@ export const COUNTRIES = [
 
 /** The 15 European countries the "Europe" region chip stands for (unchanged from the original ICP). */
 export const EUROPE_CORE = ["de", "fr", "nl", "es", "it", "se", "ie", "dk", "be", "ch", "at", "pl", "pt", "fi", "no"];
+
+// Time zone inside big countries, from the lead's location text ("Austin, Texas, United States"). Used so time buttons
+// show the prospect's own local time; the country default (COUNTRIES[].tz) applies when no state or province is named.
+export const SUBREGION_TZ = [
+  ["America/Los_Angeles", ["california", "nevada", "oregon", "washington state", ", washington,", "seattle", "san francisco", "los angeles", "san diego", "las vegas", "portland"]],
+  ["America/Denver", ["colorado", "idaho", "montana", "new mexico", "utah", "wyoming", "denver", "salt lake"]],
+  ["America/Phoenix", ["arizona", "phoenix"]],
+  ["America/Chicago", ["texas", "illinois", "alabama", "arkansas", "iowa", "kansas", "louisiana", "minnesota", "mississippi", "missouri", "nebraska", "north dakota", "oklahoma", "south dakota", "tennessee", "wisconsin", "chicago", "dallas", "houston", "austin"]],
+  ["America/Anchorage", ["alaska"]],
+  ["Pacific/Honolulu", ["hawaii"]],
+  ["America/Vancouver", ["british columbia", "vancouver"]],
+  ["America/Edmonton", ["alberta", "calgary", "edmonton"]],
+  ["America/Regina", ["saskatchewan"]],
+  ["America/Winnipeg", ["manitoba"]],
+  ["America/Halifax", ["nova scotia", "new brunswick", "prince edward island"]],
+  ["America/St_Johns", ["newfoundland"]],
+  ["Australia/Perth", ["western australia", "perth"]],
+  ["Australia/Adelaide", ["south australia", "adelaide"]],
+  ["Australia/Darwin", ["northern territory", "darwin"]],
+  ["Australia/Brisbane", ["queensland", "brisbane"]],
+  ["Australia/Melbourne", ["victoria, australia", "melbourne"]],
+  ["Australia/Hobart", ["tasmania", "hobart"]],
+];
+
+/** Code-node helper: tzFor(location, country) -> IANA zone or "" (inject into n8n Code nodes as a string). */
+export const TZ_FROM_LOCATION_JS =
+  "const SUBREGION_TZ = " + JSON.stringify(SUBREGION_TZ) + ";\n" +
+  "const COUNTRY_TZ_BY_NAME = " + JSON.stringify(Object.fromEntries(COUNTRIES.map((c) => [c.name.toLowerCase(), c.tz]))) + ";\n" +
+  "function tzFor(location, country) {\n" +
+  "  const loc = ', ' + String(location || '').toLowerCase() + ',';\n" +
+  "  const big = /united states|usa|canada|australia/.test(loc + ' ' + String(country || '').toLowerCase());\n" +
+  "  if (big) for (const [tz, keys] of SUBREGION_TZ) if (keys.some(k => loc.includes(k))) return tz;\n" +
+  "  return COUNTRY_TZ_BY_NAME[String(country || '').toLowerCase()] || '';\n" +
+  "}\n";

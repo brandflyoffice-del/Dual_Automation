@@ -1,13 +1,14 @@
-import { Workflow, webhook, respond, ifNode, http, code, postgres, noop, sticky, dashboardNotify, smartleadUrl } from "./lib.mjs";
-import { QUALIFY_AND_SEQUENCE_SYSTEM } from "./prompts.mjs";
-import { COUNTRIES, EMPLOYEE_BUCKETS, EUROPE_CORE, ROLE_CATALOG } from "./targeting.mjs";
+import { Workflow, webhook, respond, ifNode, http, code, postgres, noop, sticky, dashboardNotify, smartleadUrl, PG_CRED_ID, PG_CRED_NAME } from "./lib.mjs";
+import { QUALIFY_AND_SEQUENCE_SYSTEM, EMAIL_RULES_JS } from "./prompts.mjs";
+import { DEFAULT_SERVICE_LINES, DEFAULT_DELIVER, BRAND_FACTS } from "./services.mjs";
+import { COUNTRIES, EMPLOYEE_BUCKETS, EUROPE_CORE, ROLE_CATALOG, TZ_FROM_LOCATION_JS } from "./targeting.mjs";
 
 // Shared lists baked into the Code nodes (same lists the dashboard Launch form uses).
 const TARGETING_JS =
   "const ROLE_CATALOG = " + JSON.stringify(ROLE_CATALOG.map(({ id, titles, rx, not }) => ({ id, titles, rx, not: not || null }))) + ";\n" +
   "const COUNTRIES = " + JSON.stringify(COUNTRIES.map(({ code, name, region }) => [code, name, region])) + ";\n" +
   "const ALL_EMP = " + JSON.stringify(EMPLOYEE_BUCKETS.map((b) => b.id)) + ";\n" +
-  "const EUROPE_CORE = " + JSON.stringify(EUROPE_CORE) + ";\n";
+  "const EUROPE_CORE = " + JSON.stringify(EUROPE_CORE) + ";\n" + TZ_FROM_LOCATION_JS;
 
 export function buildWorkflow1() {
   const w = new Workflow("Fenebris_01_Lead_Scraper_And_AI_Enrichment");
@@ -288,7 +289,9 @@ const pushLead = (lead) => {
   const custom = customRx.find(c => c.rx.test(hay));
   // Only custom industries chosen: the people search already filtered by them, so a lead with no industry text is kept.
   const industry = ctx.industriesSel.find(k => INDUSTRY_RX[k].test(hay)) || (custom && custom.label)
-    || (ctx.industriesSel.length === 1 && !customRx.length ? ctx.industriesSel[0] : null)
+    // The search already filtered by the one chosen industry; a lead whose text names none is kept under its OWN industry
+    // (e.g. "Software Development"), never relabelled as the chosen one (that mislabelled software firms as shops).
+    || (ctx.industriesSel.length === 1 && !customRx.length ? (String(lead.industryRaw || '').trim().slice(0, 60) || ctx.industriesSel[0]) : null)
     || (!ctx.industriesSel.length && customRx.length && !hay.replace(/[\s,]/g, '') ? customRx[0].label : null);
   if (!industry) return;
   const domain = String(lead.domain || '').toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
@@ -298,7 +301,7 @@ const pushLead = (lead) => {
     email, firstName: lead.firstName || '', lastName: lead.lastName || '', role: lead.role || '',
     linkedinUrl: lead.linkedinUrl || null,
     companyName: lead.companyName || domain, companyDomain: domain, companyWebsite: 'https://' + domain,
-    country: lead.country, region: region || 'OTHER', industry,
+    country: lead.country, region: region || 'OTHER', industry, timezone: tzFor(lead.location, lead.country) || null,
     employeeCount: employees || null, annualRevenue: annual || null, sourceId: lead.sourceId || null,
     leadSource: ctx.provider || 'ai-ark',
     headline: String(lead.headline || '').slice(0, 200), companyAbout: String(lead.about || '').replace(/\s+/g, ' ').slice(0, 600),
@@ -324,8 +327,8 @@ for (const it of $input.all()) {
       email, firstName: a.firstName || '', lastName: a.lastName || '', role: a.jobTitle || a.primaryTitle || '',
       linkedinUrl: a.linkedinUrl || null, companyName: a.companyName || '', domain: a.companyDomain || '',
       country, employeeCount: staffCount(a.companySize), annualRevenue: 0, sourceId: a.personId || null,
-      headline: a.headline || '', about: a.companyDescription || a.companyAbout || '',
-      hay: [a.companyIndustry, a.headline, a.companyName, a.jobTitle].join(' '),
+      headline: a.headline || '', about: a.companyDescription || a.companyAbout || '', location: a.location || '',
+      hay: [a.companyIndustry, a.headline, a.companyName, a.jobTitle].join(' '), industryRaw: a.companyIndustry || '',
     });
     continue;
   }
@@ -348,7 +351,8 @@ for (const it of $input.all()) {
     annualRevenue: revObj ? Number(revObj.amount || revObj.start || 0) : 0,
     sourceId: m.id || null,
     headline: profile.headline || '', about: summary.description || summary.overview || company.description || '',
-    hay: [summary.industry, (company.industries || []).join(' '), (company.keywords || []).join(' '), summary.name, profile.headline].join(' '),
+    location: [loc.city, loc.state, loc.country].filter(Boolean).join(', '),
+    hay: [summary.industry, (company.industries || []).join(' '), (company.keywords || []).join(' '), summary.name, profile.headline].join(' '), industryRaw: summary.industry || '',
   });
 }
 const cap = ctx.maxPerCompany || 2;
@@ -458,7 +462,8 @@ $input.all().forEach((it, i) => {
   const stack = [];
   if (/cdn\.shopify\.com|Shopify\.theme/i.test(html)) stack.push('Shopify');
   if (/woocommerce/i.test(html)) stack.push('WooCommerce');
-  if (/Magento_|mage\/|\/static\/version/i.test(html)) stack.push('Magento');
+  // Magento ships Magento_* modules, mage-init and versioned static paths; a bare "mage/" also matched "image/" everywhere.
+  if (/Magento_[A-Z]|data-mage-init|x-magento-init|\/static\/version\d{6,}\//.test(html)) stack.push('Magento');
   if (/wp-content|wp-includes/i.test(html)) stack.push('WordPress');
   if (/wixstatic\.com/i.test(html)) stack.push('Wix');
   if (/squarespace/i.test(html)) stack.push('Squarespace');
@@ -522,16 +527,33 @@ return out;
   );
 
   /* ── 4. AI qualification + sequence ── */
+  // The client's service catalogue (Services page, app_settings.service_lines) is what every email may offer.
+  w.add(
+    "DB: Service Catalogue",
+    "n8n-nodes-base.postgres",
+    2.5,
+    [14.5, 0],
+    { operation: "executeQuery", query: "select (select value from app_settings where key = 'service_lines') as lines", options: {} },
+    { credentials: { postgres: { id: PG_CRED_ID, name: PG_CRED_NAME } }, alwaysOutputData: true, executeOnce: true, onError: "continueRegularOutput" },
+  );
   code(
     w,
     "Build LLM Request",
     [15, 0],
-    "const SYSTEM = " + JSON.stringify(QUALIFY_AND_SEQUENCE_SYSTEM) + ";\n" + String.raw`
+    "const SYSTEM = " + JSON.stringify(QUALIFY_AND_SEQUENCE_SYSTEM) + ";\nconst DEFAULT_LINES = " + JSON.stringify(DEFAULT_SERVICE_LINES) +
+      ";\nconst DEFAULT_DELIVER = " + JSON.stringify(DEFAULT_DELIVER) + ";\nconst BRAND_FACTS = " + JSON.stringify(BRAND_FACTS) + ";\n" + String.raw`
 const ctx = $('Build ICP Query').first().json.ctx;
 const booking = $env.BOOKING_LINK;
 const sender = $env.SENDER_NAME || 'Aarav Mehta';
 if (!booking) throw new Error('BOOKING_LINK env var is required');
-return $input.all().map(it => {
+const stored = (($('DB: Service Catalogue').first() || {}).json || {}).lines;
+const lines = Array.isArray(stored) && stored.length ? stored : DEFAULT_LINES;
+const brand = String(ctx.campaignId) === '4238487' ? 'Expert in SEO' : 'TapadiaTech';
+// The campaign's own service line first, so the AI leans to what this campaign sells.
+const ordered = [...lines].sort((a, b) => (String(b.campaignId) === String(ctx.campaignId)) - (String(a.campaignId) === String(ctx.campaignId)));
+const ourServices = ordered.map(l => '- ' + l.name + (String(l.campaignId) === String(ctx.campaignId) ? ' (this campaign)' : '') + ':\n' +
+  (l.items || []).map(i => '  - ' + i.name + ' | signals: ' + (i.signals || '-') + ' | deliver: ' + (i.deliver || DEFAULT_DELIVER[String(i.name).toLowerCase()] || i.name)).join('\n')).join('\n');
+return $('Site Audit Extract').all().map(it => {
   const l = it.json;
   const user =
     '<prospect>' + JSON.stringify({ first_name: l.firstName, role: l.role, company: l.companyName, website: l.companyWebsite, country: l.country, region: l.region,
@@ -541,7 +563,8 @@ return $input.all().map(it => {
       mobile_pagespeed: l.auditFindings.pageSpeedMobile, lcp_seconds: l.auditFindings.lcpSeconds, tech_stack: l.auditFindings.techStack }) + '</audit>\n' +
     '<case_studies>' + (($env.CASE_STUDIES) || '') + '</case_studies>\n' +
     '<booking_link>' + booking + '</booking_link>\n<sender_name>' + sender + '</sender_name>\n' +
-    '<brand>' + (String(ctx.campaignId) === '4238487' ? 'Expert in SEO' : 'TapadiaTech') + '</brand>\n' +
+    '<brand>' + brand + '</brand>\n<brand_facts>' + (BRAND_FACTS[brand] || '') + '</brand_facts>\n' +
+    '<our_services>\n' + ourServices + '\n</our_services>\n' +
     '<offering>' + (ctx.offering || ctx.service || 'none') + '</offering>\n' +
     '<preferred_service_tiebreaker>' + (ctx.service || 'none') + '</preferred_service_tiebreaker>\n' +
     '<ticket_gate>' + ($env.TICKET_GATE === 'off' ? 'off' : 'on') + '</ticket_gate>\n' +
@@ -563,7 +586,7 @@ return $input.all().map(it => {
     w,
     "Parse AI + Qualification Gate",
     [17, 0],
-    String.raw`
+    EMAIL_RULES_JS + String.raw`
 const src = $('Build LLM Request').all();
 const ctx = $('Build ICP Query').first().json.ctx;
 const booking = $env.BOOKING_LINK;
@@ -575,10 +598,43 @@ const toHtml = s => String(s).trim().split(/\r?\n\s*\r?\n/).map(p => '<p style="
 // The template carries the signature, so a sign-off the model adds anyway is cut.
 const stripSignoff = s => String(s).replace(/\n+\s*(best|kind|warm)?\s*regards,?[\s\S]*$/i, '').replace(/\n+\s*(cheers|thanks|best),?\s*\n+\s*jay[\s\S]*$/i, '').trim();
 const out = [];
-$input.all().forEach((it, i) => {
+// Quality check: a sequence that breaks the email rules (jargon, salesy or repeated subjects, boilerplate, no concrete
+// offer, an "unknown site" pain point) goes back to the model ONCE with the list of problems; the fixed version is used.
+const helpers = this.helpers;
+async function fixSequence(req, original, problems) {
+  const r = await helpers.httpRequest({ method: 'POST', url: 'https://api.openai.com/v1/chat/completions', json: true, timeout: 90000,
+    headers: { Authorization: 'Bearer ' + $env.OPENAI_API_KEY, 'content-type': 'application/json' },
+    body: { ...req, temperature: 0.3, messages: [...req.messages, { role: 'assistant', content: original },
+      { role: 'user', content: 'Your JSON breaks these rules:\n- ' + problems.join('\n- ') + '\nFix every one and return the complete JSON again (same keys). Keep the facts; change only the wording.' }] } });
+  return JSON.parse(r.choices[0].message.content);
+}
+const llmItems = $input.all();
+for (let i = 0; i < llmItems.length; i++) await (async (it, i) => {
   const lead = src[i].json;
   let ai;
   try { ai = JSON.parse(it.json.choices[0].message.content); } catch (e) { return; } // unparsable => skipped, never half-synced
+  let problems = emailProblems(ai, lead.firstName);
+  const firstProblems = problems.slice();
+  if (problems.length) {
+    try {
+      const fixed = await fixSequence(src[i].json.llmRequest, it.json.choices[0].message.content, problems);
+      if (fixed && Array.isArray(fixed.emails) && fixed.emails.length === 4) { ai = fixed; problems = emailProblems(ai, lead.firstName); }
+    } catch (e) { /* keep the first version; the problems are stored with the lead */ }
+  }
+  // Last resort: a subject that still breaks the rules (salesy, pushy or repeated) is replaced by a plain one.
+  if (Array.isArray(ai.emails)) {
+    const co = String(lead.companyName || '').trim() || 'your team';
+    const first = String(lead.firstName || '').trim() || co;
+    const safe = [co + ' ' + (ai.offer_service ? String(ai.offer_service).toLowerCase() : 'idea'), 'Idea for ' + co, 'Question for ' + first, 'Closing the loop, ' + first];
+    const seen = new Set();
+    ai.emails.forEach((e, k) => {
+      if (!e) return;
+      const s = String(e.subject || '');
+      if (!s.trim() || BANNED_SUBJECT.test(s) || PUSHY.test(s) || seen.has(s.trim().toLowerCase())) e.subject = safe[k] || 'Note for ' + co;
+      seen.add(String(e.subject).trim().toLowerCase());
+    });
+    problems = emailProblems(ai, lead.firstName);
+  }
   const emails = Array.isArray(ai.emails) ? ai.emails : [];
   const emailsOk = emails.length === 4 && emails.every((e, k) => e && e.step === k + 1 && e.subject && e.body && !/\{\{|\}\}|\[(name|company|first)/i.test(e.subject + e.body));
   const ticket = Number.isInteger(ai.estimated_ticket_usd) ? ai.estimated_ticket_usd : 0;
@@ -592,7 +648,7 @@ $input.all().forEach((it, i) => {
   const bodies = emails.map(e => stripSignoff(e.body.split(booking).join('the button below'))); // CTA is the template's booking button
   const now = Date.now();
   const sequences = emails.map((e, k) => ({ step: k + 1, subject: e.subject, body: bodies[k], scheduled_at: new Date(now + DAYS[k] * 86400000).toISOString() }));
-  const cv = { pain_point: ai.pain_point_tag, pain_point_detail: ai.pain_point_detail, recommended_service: serviceName,
+  const cv = { pain_point: ai.pain_point_tag, pain_point_detail: ai.pain_point_detail, recommended_service: ai.offer_service || serviceName,
     ticket_size: String(ticket), booking_link: booking };
   emails.forEach((e, k) => { cv['subject_' + (k + 1)] = e.subject; cv['email_' + (k + 1)] = toHtml(bodies[k]); });
 
@@ -604,14 +660,15 @@ $input.all().forEach((it, i) => {
       settings: { ignore_global_block_list: false, ignore_unsubscribe_list: false, ignore_duplicate_leads_in_other_campaign: true } },
     record: {
       email: lead.email, emailStatus: 'VALID', firstName: lead.firstName, lastName: lead.lastName, role: lead.role, linkedinUrl: lead.linkedinUrl,
-      companyName: lead.companyName, companyDomain: lead.companyDomain, companyWebsite: lead.companyWebsite, country: lead.country, region: lead.region,
+      companyName: lead.companyName, companyDomain: lead.companyDomain, companyWebsite: lead.companyWebsite, country: lead.country, region: lead.region, timezone: lead.timezone || null,
       industry: lead.industry, employeeCount: lead.employeeCount, annualRevenue: lead.annualRevenue, painPoint: ai.pain_point_tag, painPointDetail: ai.pain_point_detail,
       auditFindings: lead.auditFindings, recommendedService: serviceName, qualificationScore: Math.max(0, Math.min(100, Math.round(ai.qualification_score || 0))),
-      estimatedTicket: ticket, dossier: { summary: ai.dossier_summary, business: ai.business_summary && ai.business_summary !== 'unknown' ? ai.business_summary : null, opportunity: ai.opportunity_reason || ai.pain_point_detail, discoveryQuestions: ai.discovery_questions, talkingPoints: ai.talking_points },
+      estimatedTicket: ticket, dossier: { summary: ai.dossier_summary, business: ai.business_summary && ai.business_summary !== 'unknown' ? ai.business_summary : null, opportunity: ai.opportunity_reason || ai.pain_point_detail, discoveryQuestions: ai.discovery_questions, talkingPoints: ai.talking_points,
+        offer: ai.offer_service || null, offerLine: ai.offer_line || null, qualityIssues: problems.length ? problems : null, rewritten: firstProblems.length > 0 },
       campaignId: ctx.campaignId, leadSource: lead.leadSource || ctx.provider || 'ai-ark', sequences,
     },
   } });
-});
+})(llmItems[i], i);
 return out;
 `,
   );
@@ -641,10 +698,10 @@ return $input.all().map((it, i) => ({ json: { record: { ...src[i].json.record, o
     `WITH r AS (SELECT $1::jsonb AS d),
 l AS (
   INSERT INTO leads (email, email_status, first_name, last_name, role, linkedin_url, company_name, company_domain, company_website,
-    country, region, industry, employee_count, annual_revenue, pain_point, pain_point_detail, audit_findings, recommended_service,
+    country, region, timezone, industry, employee_count, annual_revenue, pain_point, pain_point_detail, audit_findings, recommended_service,
     qualification_score, estimated_ticket, dossier, stage, current_step, outreach_lead_id, campaign_id, source, updated_at)
   SELECT lower(d->>'email'), d->>'emailStatus', d->>'firstName', coalesce(d->>'lastName',''), d->>'role', d->>'linkedinUrl',
-    d->>'companyName', d->>'companyDomain', d->>'companyWebsite', d->>'country', d->>'region', d->>'industry',
+    d->>'companyName', d->>'companyDomain', d->>'companyWebsite', d->>'country', d->>'region', nullif(d->>'timezone', ''), d->>'industry',
     nullif(d->>'employeeCount','')::int, COALESCE(NULLIF(d->>'annualRevenue','')::int, 0), d->>'painPoint', d->>'painPointDetail', d->'auditFindings',
     d->>'recommendedService', (d->>'qualificationScore')::int, (d->>'estimatedTicket')::int, d->'dossier', 'VERIFIED', 0,
     d->>'outreachLeadId', d->>'campaignId', coalesce(d->>'leadSource','ai-ark'), now()
@@ -652,7 +709,7 @@ l AS (
   ON CONFLICT (email) DO UPDATE SET
     pain_point = EXCLUDED.pain_point, pain_point_detail = EXCLUDED.pain_point_detail, audit_findings = EXCLUDED.audit_findings,
     recommended_service = EXCLUDED.recommended_service, qualification_score = EXCLUDED.qualification_score,
-    estimated_ticket = EXCLUDED.estimated_ticket, dossier = EXCLUDED.dossier,
+    estimated_ticket = EXCLUDED.estimated_ticket, dossier = EXCLUDED.dossier, timezone = coalesce(EXCLUDED.timezone, leads.timezone),
     outreach_lead_id = coalesce(EXCLUDED.outreach_lead_id, leads.outreach_lead_id), updated_at = now()
   RETURNING id
 ),
@@ -720,6 +777,7 @@ return [{ json: { event: 'batch_finished', ingest: false, data: { source: ctx.so
     "Fetch Website Home Page",
     "PageSpeed: Mobile Performance",
     "Site Audit Extract",
+    "DB: Service Catalogue",
     "Build LLM Request",
     "AI: Qualify + Generate 4-Step Sequence",
     "Parse AI + Qualification Gate",

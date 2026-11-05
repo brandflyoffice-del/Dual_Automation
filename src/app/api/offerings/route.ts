@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 // Service lines (what the client sells) with their sub-services. Stored in Postgres app_settings.service_lines, so additions
 // survive redeploys (the old data/offerings.json lived inside the container image and was lost on every deploy).
 const campaignIds = OUTREACH_CAMPAIGNS.map((c) => c.id) as [string, ...string[]];
-const sub = z.object({ name: z.string().trim().min(2).max(80), signals: z.string().trim().max(240).default("") });
+const sub = z.object({ name: z.string().trim().min(2).max(80), signals: z.string().trim().max(240).default(""), deliver: z.string().trim().max(240).optional() });
 const line = z.object({
   id: z.string().trim().min(1).max(40),
   name: z.string().trim().min(2).max(60),

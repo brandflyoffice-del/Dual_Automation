@@ -10,6 +10,7 @@ const GCRED = { googleCalendarOAuth2Api: { id: "y5FL0LJTf7OK7BZo", name: "Google
 
 const LEAD_CONTEXT_SQL = `SELECT l.id, l.email, l.first_name, l.company_name, l.role, l.region, l.country, l.recommended_service,
   l.pain_point, l.pain_point_detail, l.estimated_ticket, l.stage, l.campaign_id, l.outreach_lead_id,
+  l.timezone, l.dossier->>'business' AS business, l.dossier->>'offer' AS offer, l.dossier->>'offerLine' AS offer_line,
   (SELECT coalesce(jsonb_agg(jsonb_build_object('step', cs.step, 'subject', cs.subject, 'body', cs.body) ORDER BY cs.step), '[]'::jsonb)
      FROM campaign_sequences cs WHERE cs.lead_id = l.id AND cs.status = 'SENT') AS sent_emails,
   (SELECT e.external_id FROM email_events e WHERE e.lead_id = l.id AND e.type = 'REPLY_RECEIVED' AND e.external_id IS NOT NULL ORDER BY e.occurred_at DESC LIMIT 1) AS reply_to_id,
@@ -350,7 +351,9 @@ return [{ json: { ctx: { ...ctx, thread, ids, threadLoaded: hist.length > 0 } } 
 const ctx = $input.first().json.ctx;
 const TZ = { US: 'America/New_York', UK: 'Europe/London', EUROPE: 'Europe/Berlin', UAE: 'Asia/Dubai' };
 const COUNTRY_TZ = ${COUNTRY_TZ_JSON};
-const tz = COUNTRY_TZ[String(ctx.lead.country || '').toLowerCase()] || TZ[ctx.lead.region] || 'UTC';
+// The lead's own zone (from city/state at scrape time) wins, then the country, then the region.
+const validTz = z => { try { return z ? (Intl.DateTimeFormat('en-US', { timeZone: z }), z) : ''; } catch (e) { return ''; } };
+const tz = validTz(ctx.lead.timezone) || COUNTRY_TZ[String(ctx.lead.country || '').toLowerCase()] || TZ[ctx.lead.region] || 'UTC';
 const day = 86400000, now = Date.now();
 const iso = ms => new Date(ms).toISOString().slice(0, 10);
 return [{ json: { ctx: { ...ctx, tz }, qs: { start: iso(now), end: iso(now + 9 * day), timeZone: tz } } }];
@@ -465,7 +468,10 @@ const threadText = (ctx.thread && ctx.thread.length)
   : '[US] Subject: ' + (sent.subject || ctx.lead.last_subject || '') + '\n' + (sent.body || '');
 const user =
   '<intent>' + ctx.intent + '</intent>\n' +
-  '<prospect>' + JSON.stringify({ first_name: ctx.lead.first_name, company: ctx.lead.company_name, role: ctx.lead.role, pain_point: ctx.lead.pain_point, recommended_service: ctx.lead.recommended_service }) + '</prospect>\n' +
+  // what_they_do / our_offer_for_them come from the lead lane, so "what do you offer?" is answered with THEIR offer first.
+  '<prospect>' + JSON.stringify({ first_name: ctx.lead.first_name, company: ctx.lead.company_name, role: ctx.lead.role, what_they_do: ctx.lead.business || null,
+    pain_point: ctx.lead.pain_point, pain_point_detail: ctx.lead.pain_point_detail || null, recommended_service: ctx.lead.recommended_service,
+    our_offer_for_them: ctx.lead.offer || null, what_we_would_do: ctx.lead.offer_line || null }) + '</prospect>\n' +
   '<thread>\n' + threadText + '\n</thread>\n' +
   '<prospect_latest_reply>\n' + ctx.replyText + '\n</prospect_latest_reply>\n' +
   '<open_slots>\n' + (openList.length ? openList.map(s => s.iso + ' | ' + s.label).join('\n') : '(none)') + '\n</open_slots>\n' +
@@ -659,7 +665,8 @@ const v = $('Verify Slot Link').first().json;
 const row = $input.first().json || {};
 const TZ = { US: 'America/New_York', UK: 'Europe/London', EUROPE: 'Europe/Berlin', UAE: 'Asia/Dubai' };
 const COUNTRY_TZ = ${COUNTRY_TZ_JSON};
-const tz = COUNTRY_TZ[String(row.country || '').toLowerCase()] || TZ[row.region] || 'UTC';
+const validTz = z => { try { return z ? (Intl.DateTimeFormat('en-US', { timeZone: z }), z) : ''; } catch (e) { return ''; } };
+const tz = validTz(row.timezone) || COUNTRY_TZ[String(row.country || '').toLowerCase()] || TZ[row.region] || 'UTC';
 const first = String(row.first_name || '').trim() || v.email.split('@')[0];
 const ms = new Date(v.startIso).getTime();
 return [{ json: { bk: { source: 'link', email: v.email, startIso: v.startIso, tz, firstName: first, name: first, label: slotLabel(ms, tz), known: !!row.id,

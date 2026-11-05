@@ -58,9 +58,15 @@ function slotSig(secret, email, startIso) {
 
 /** Time label in a given IANA zone, e.g. "Tuesday, 4 November, 16:00 (America/New York)". */
 export const FMT_JS = String.raw`
+// "Tuesday 10 November, 10:30 AM (New York time)": the prospect's own local time with a plain zone name.
+const TZ_NAME = { 'Asia/Kolkata': 'India', 'Asia/Calcutta': 'India', 'Asia/Dubai': 'UAE', 'Europe/London': 'UK', 'America/New_York': 'New York',
+  'America/Chicago': 'Chicago', 'America/Denver': 'Denver', 'America/Phoenix': 'Arizona', 'America/Los_Angeles': 'California', 'Australia/Sydney': 'Sydney' };
+function tzName(tz) { return TZ_NAME[tz] || String(tz).split('/').pop().replace(/_/g, ' '); }
 function slotLabel(ms, tz) {
-  const t = new Intl.DateTimeFormat('en-GB', { timeZone: tz, weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(ms));
-  return t.replace(',', ',') + ' (' + String(tz).replace(/_/g, ' ') + ')';
+  const d = new Date(ms);
+  const day = new Intl.DateTimeFormat('en-GB', { timeZone: tz, weekday: 'long', day: 'numeric', month: 'long' }).format(d).replace(',', '');
+  const time = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit', hour12: true }).format(d);
+  return day + ', ' + time + ' (' + tzName(tz) + ' time)';
 }
 function hourIn(ms, tz) {
   return parseInt(new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', hour12: false }).format(new Date(ms)), 10) % 24;

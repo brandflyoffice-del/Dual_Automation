@@ -12,6 +12,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/
 import { OUTREACH_CAMPAIGNS } from "@/lib/constants";
 import type { ServiceLine, SubService } from "@/lib/settings-shared";
 import { cn } from "@/lib/utils";
+import { DEFAULT_DELIVER } from "../../../n8n/services.mjs";
 
 const campaignName = (id: string) => OUTREACH_CAMPAIGNS.find((c) => c.id === id)?.name ?? id;
 const slug = (name: string) =>
@@ -37,18 +38,22 @@ function CampaignSelect({ value, onChange, disabled, className }: { value: strin
   );
 }
 
+/** Built-in "what we deliver" for a known sub-service name (used until the client writes their own). */
+const defaultDeliver = (name: string) => (DEFAULT_DELIVER as Record<string, string>)[name.trim().toLowerCase()] ?? "";
+
 /** One sub-service row: view, inline edit, or inline remove confirmation. */
 function SubRow({ item, siblings, busy, onSave, onRemove }: { item: SubService; siblings: SubService[]; busy: boolean; onSave: (s: SubService) => Promise<boolean>; onRemove: () => void }) {
   const [mode, setMode] = useState<"view" | "edit" | "confirm">("view");
   const [name, setName] = useState(item.name);
   const [signals, setSignals] = useState(item.signals);
+  const [deliver, setDeliver] = useState(item.deliver ?? "");
   const clash = !same(name, item.name) && siblings.some((s) => same(s.name, name));
   const valid = name.trim().length >= 2 && !clash;
 
   async function commit() {
     if (!valid) return;
-    if (name.trim() === item.name && signals.trim() === item.signals) return setMode("view");
-    if (await onSave({ name: name.trim(), signals: signals.trim() })) setMode("view");
+    if (name.trim() === item.name && signals.trim() === item.signals && deliver.trim() === (item.deliver ?? "")) return setMode("view");
+    if (await onSave({ name: name.trim(), signals: signals.trim(), deliver: deliver.trim() })) setMode("view");
   }
 
   if (mode === "edit") {
@@ -66,7 +71,10 @@ function SubRow({ item, siblings, busy, onSave, onRemove }: { item: SubService; 
             <Input autoFocus value={name} maxLength={80} aria-label="Sub-service name" onChange={(e) => setName(e.target.value)} className={cn(clash && "border-rose-500")} />
             {clash && <p className="mt-1 text-[11px] text-rose-600">Already on this list.</p>}
           </div>
-          <Input value={signals} maxLength={240} aria-label="Signals" placeholder="What suggests a company needs it (optional)" onChange={(e) => setSignals(e.target.value)} />
+          <div className="grid gap-1.5">
+            <Input value={signals} maxLength={240} aria-label="Signals" placeholder="Signals: what suggests a company needs it (optional)" onChange={(e) => setSignals(e.target.value)} />
+            <Input value={deliver} maxLength={240} aria-label="What we deliver" placeholder={`What we deliver, in plain words${defaultDeliver(item.name) ? ` (default: ${defaultDeliver(item.name)})` : ""}`} onChange={(e) => setDeliver(e.target.value)} />
+          </div>
           <div className="flex gap-1.5">
             <Button type="submit" size="sm" disabled={busy || !valid}>
               {busy ? <Loader2 className="animate-spin" /> : <Check />}
@@ -79,6 +87,7 @@ function SubRow({ item, siblings, busy, onSave, onRemove }: { item: SubService; 
               onClick={() => {
                 setName(item.name);
                 setSignals(item.signals);
+                setDeliver(item.deliver ?? "");
                 setMode("view");
               }}
             >
@@ -95,6 +104,11 @@ function SubRow({ item, siblings, busy, onSave, onRemove }: { item: SubService; 
       <div className="min-w-0 text-sm font-medium">{item.name}</div>
       <div className={cn("col-span-2 row-start-2 min-w-0 text-[12px] leading-snug md:col-span-1 md:row-start-auto", item.signals ? "text-muted-foreground" : "italic text-muted-foreground/70")}>
         {item.signals || "No signals yet"}
+        {(item.deliver || defaultDeliver(item.name)) && (
+          <div className="mt-0.5 not-italic text-foreground/75">
+            <span className="font-medium text-foreground/60">We deliver:</span> {item.deliver || defaultDeliver(item.name)}
+          </div>
+        )}
       </div>
       {mode === "confirm" ? (
         <div className="col-start-2 row-start-1 flex items-center gap-1 md:col-start-auto md:row-start-auto">
@@ -123,6 +137,7 @@ function SubRow({ item, siblings, busy, onSave, onRemove }: { item: SubService; 
 function AddSubRow({ line, busy, onAdd }: { line: ServiceLine; busy: boolean; onAdd: (s: SubService) => Promise<boolean> }) {
   const [name, setName] = useState("");
   const [signals, setSignals] = useState("");
+  const [deliver, setDeliver] = useState("");
   const nameRef = useRef<HTMLInputElement>(null);
   const clash = line.items.some((i) => same(i.name, name));
   return (
@@ -131,9 +146,10 @@ function AddSubRow({ line, busy, onAdd }: { line: ServiceLine; busy: boolean; on
       onSubmit={async (e) => {
         e.preventDefault();
         if (name.trim().length < 2 || clash) return;
-        if (await onAdd({ name: name.trim(), signals: signals.trim() })) {
+        if (await onAdd({ name: name.trim(), signals: signals.trim(), deliver: deliver.trim() })) {
           setName("");
           setSignals("");
+          setDeliver("");
           nameRef.current?.focus();
         }
       }}
@@ -142,7 +158,10 @@ function AddSubRow({ line, busy, onAdd }: { line: ServiceLine; busy: boolean; on
         <Input ref={nameRef} value={name} maxLength={80} aria-label={`New sub-service under ${line.name}`} placeholder="New sub-service, e.g. Shopify Plus" onChange={(e) => setName(e.target.value)} className={cn(clash && "border-rose-500")} />
         {clash && <p className="mt-1 text-[11px] text-rose-600">Already on this list.</p>}
       </div>
-      <Input value={signals} maxLength={240} aria-label="Signals for the new sub-service" placeholder="Signals: what suggests a company needs it (optional)" onChange={(e) => setSignals(e.target.value)} />
+      <div className="grid gap-1.5">
+        <Input value={signals} maxLength={240} aria-label="Signals for the new sub-service" placeholder="Signals: what suggests a company needs it (optional)" onChange={(e) => setSignals(e.target.value)} />
+        <Input value={deliver} maxLength={240} aria-label="What we deliver for the new sub-service" placeholder="What we deliver, in plain words (the emails pitch this)" onChange={(e) => setDeliver(e.target.value)} />
+      </div>
       <Button type="submit" variant="secondary" disabled={busy || name.trim().length < 2 || clash}>
         {busy ? <Loader2 className="animate-spin" /> : <Plus />}
         Add

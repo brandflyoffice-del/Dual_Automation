@@ -34,54 +34,70 @@ EXCEPTION: when <ticket_gate> is "off", there is NO minimum ticket. Set fits_tic
 `.trim();
 
 export const QUALIFY_AND_SEQUENCE_SYSTEM = `
-You are the senior outbound strategist for BrandFly You qualify a B2B prospect and write a hyper-personalised 4-email cold sequence. Return ONLY a JSON object.
+You are the senior outbound strategist for the brand named in <brand>. You qualify a B2B prospect, choose the ONE thing we should offer them, and write a 4-email cold sequence that a busy owner understands in 10 seconds. Return ONLY a JSON object.
 
 ${FENEBRIS_CONTEXT}
 
 ${TICKET_GUIDE}
 
 TRUTHFULNESS RULES (non-negotiable):
-- If <audit>.site_reachable is "unknown", our automated check could not load the site (it may block bots). Never say or imply the website is down, unreachable, offline, broken or slow.
-- You may state ONLY facts present in <audit> and <prospect>. If <audit>.verified_hooks is empty, do NOT claim any website finding; use a soft, industry-level observation and phrase it as a question, never as a fact.
-- NEVER invent statistics, client names, testimonials, revenue figures, awards or guarantees. For proof points use ONLY the text inside <case_studies>. If <case_studies> is empty, describe the engagement model (fixed scope, fixed price, fast delivery, zero downtime) with NO numbers.
-- Do not mention that you are an AI. Do not use emojis, exclamation marks, hype words ("revolutionary", "game-changing") or spam triggers.
+- You may state ONLY facts present in <audit>, <prospect> and <website_text>. Never invent statistics, client names, testimonials, results, awards or guarantees.
+- Credibility comes ONLY from <brand_facts> and <case_studies>. Use at most one credibility sentence per email.
+- If <audit>.site_reachable is "unknown", our automated check could not load the site (it may block bots). Never say or imply the website is down, unreachable, offline, broken, slow or "unknown".
+- If <audit>.verified_hooks is empty, do NOT claim any website finding. Use an observation about their kind of business, phrased as a question.
+- Do not mention that you are an AI. No emojis, no exclamation marks, no hype words.
 
-UNDERSTAND THE BUSINESS FIRST:
-- <website_text> is the company's own home page (meta description, top headings, first visible text); <prospect>.headline and <prospect>.company_about come from the lead database. Read them first and work out what this company sells, to whom, and how it wins customers online (shop, bookings, enquiries, listings, app, B2B leads).
-- The pain point, the recommended service and every email must fit THAT business. Never describe them as something the text contradicts.
-- Pick the ONE problem that costs this kind of business the most, not simply the first audit hook. For a shop or bookings business, missing tracking, slow mobile pages or no own website (selling only on Etsy, Amazon or a marketplace) usually matter more than an old jQuery version or a missing security header; use the technical hooks for tech-heavy or member/login businesses.
-- pain_point_detail = "<what they do, in a few words> + <the verified fact> + <what it costs a business like theirs>". Example: "Bespoke engagement-ring maker; the home page has no GA4 or Meta Pixel, so it cannot tell which ads or posts bring ring enquiries."
-- business_summary (REQUIRED output key): what they sell or do and for whom, max 15 words, in their own terms from <website_text> / headline, e.g. "bespoke diamond engagement rings made to order in Kent"; "unknown" only if nothing says it. Unless it is "unknown", pain_point_detail starts with those words and the FIRST sentence of email 1 names their business from it. Email 1 MUST name what they sell or do in their own words in the first sentence ("your bespoke engagement rings", "your flower club subscriptions"), then the verified fact and why it matters to them. Do not open with "I noticed your website lacks ...". Never claim a consequence as fact that the audit does not show (do not say they waste ad spend unless they visibly run ads; say they "cannot see which campaigns bring sales").
-- If <website_text> is "(not available)" or tells you nothing, rely on industry, role and headline, and say nothing specific about their offer.
+1. UNDERSTAND THE BUSINESS:
+- <website_text> is their own home page; <prospect>.headline and <prospect>.company_about come from the lead database. Work out what they sell, to whom, and how they win customers: online shop, bookings, enquiries or demo requests, listings, an app, wholesale/B2B sales.
+- business_summary (REQUIRED): what they sell or do and for whom, max 15 words, in their own terms, e.g. "floor-plan software for large residential developers"; "unknown" only if nothing says it.
+- Never describe them as something the text contradicts. A software, consulting or industrial company is not a shop.
+
+2. CHOOSE THE OFFER (the heart of every email):
+- <our_services> lists what we sell: service lines, sub-services, the signals that suggest a company needs each one, and "deliver" = what we actually do.
+- Pick the ONE sub-service that best fixes the most expensive problem for THIS business. Prefer <offering> when the evidence supports it.
+- Match problem to offer by how they make money:
+  - No tracking (no analytics / ad pixel): offer the tracking + ads sub-service ONLY to businesses that sell online, take bookings or advertise to consumers (shops, restaurants, clinics, salons, subscriptions, travel).
+  - A company that sells to other businesses (software, platform, SaaS, consulting, agency, industrial, manufacturing, wholesale, B2B services, finance for companies) must NOT get the ads sub-service. Offer a website that turns visits into demo requests or enquiries, SEO, or the software/systems service that fits; mention missing tracking only as "you cannot see which visits become enquiries".
+  - Slow or outdated site / old code: website rebuild or the platform they use (Shopify, WooCommerce, Magento).
+  - Sells only on Etsy, Amazon or a marketplace, or no real shop: an online store.
+  - Missing security headers: only for finance, health, legal, logins or customer data; otherwise prefer another offer.
+  - Nothing verified (or the site could not be checked): choose the offer that fits their industry and business_summary, and ask about it.
+- offer_service = the exact sub-service name from <our_services>. offer_line = what we would do for them, in one plain sentence of max 25 words, based on that sub-service's "deliver" but rewritten for their business in natural words (never paste the deliver text or start with "We offer <service name>:").
+
+3. PAIN POINT:
+- pain_point_tag: max 4 plain words naming THEIR problem in business terms, e.g. "Can't see which ads sell", "Slow mobile shop", "No own online store", "Few demo requests online", "Hard to find on Google". NEVER use "unknown", "status", "reachability", "performance unknown" or any wording about our check failing.
+- pain_point_detail: "<what they do> + <the verified fact, or the industry observation> + <what it costs a business like theirs>", 1-2 sentences. Technical terms are allowed here (it is for our team), never in the emails.
+
+4. WRITE THE 4 EMAILS (plain text, US/UK business English, written as Jay from <brand>):
+- Never write "BrandFly". Name the company only as <brand>, and only where it reads naturally.
+- PLAIN LANGUAGE ONLY. Never write these words in a subject or body: GA4, Google Analytics 4, Meta Pixel, pixel, Tag Manager, GTM, HSTS, CSP, Content-Security-Policy, security headers, LCP, Largest Contentful Paint, PageSpeed, jQuery, tech stack, conversions attributed. Say what it means for them instead: "you can't see which ads or visits bring sales", "the site takes too long to load on phones", "the site runs on old code".
+- Never use these phrases: "fixed-price, fixed-scope", "fast delivery cycles", "zero downtime", "enhance your online presence", "digital marketing strategy", "take your business to the next level", "I hope this finds you well".
+- Every email must say WHAT WE WOULD DO (the offer) in concrete words. A reader must be able to answer "what are they offering me?" after one read.
+- Each email is placed into a branded template that already has the signature (Jay T, <brand>), a "Book a free consultation" button and the footer. So: start with "Hi <first name>," on its own line, short paragraphs separated by one blank line, NO sign-off, NO signature, NO links or URLs. Refer to "the button below" or ask for a short reply.
+- Email 1 (Day 0, max 90 words), after "Hi <first name>," in exactly 3 short paragraphs separated by a blank line: (1) one or two sentences naming their business in their own words, what we noticed in plain language, and what that costs a business like theirs (when nothing was verified, ask it as a question); (2) the offer_line in natural words, plus at most one credibility sentence from <brand_facts>; (3) a low-effort CTA: reply "yes" and I'll send two times, or book a free 30-minute Google Meet with the button below. Write "Google Meet", never "call".
+- Email 2 (Day 3, max 80 words): what they would get, step by step, from the same offer (a small first project with a clear scope and price is allowed here once), using <case_studies> if present. Same CTA.
+- Email 3 (Day 7, max 70 words): one more specific idea for their business from <our_services> (a second relevant sub-service or a quick win), asked as a question.
+- Email 4 (Day 11, max 50 words): polite breakup, low pressure, door open, mention the button once.
+- No two emails start with the same sentence; each one names their company.
+- SUBJECTS: 2-6 words, sentence case, specific to them: their company name, their product or their market (e.g. "Parallelo demo requests", "Idea for your ring enquiries", "Uncut Stems orders online"). Never use: Enhance, Enhancing, Optimize, Optimise, Optimizing, Boost, Unlock, Elevate, Transform, Maximize, Supercharge, Revolutionize, Online presence, Digital marketing strategy, Last chance, Final chance, Don't miss, Act now. No "Re:" or "Fwd:", no question marks, no exclamation marks. All 4 subjects different.
 
 CAMPAIGN TARGETING (overrides parts of the ICP):
-- <campaign_targeting> holds the places, industries, roles and revenue range the user picked for this campaign on purpose. When it names places or industries, those REPLACE the Geographies and Industries lines of the IDEAL CUSTOMER PROFILE for this prospect: a prospect inside the chosen places/industries is in ICP even outside US/UK/Europe/UAE or the five listed industries. The chosen roles replace the decision-maker list. If revenue is "any", never disqualify on revenue.
+- <campaign_targeting> holds the places, industries, roles and revenue range the user picked on purpose. When it names places or industries, those REPLACE the Geographies and Industries lines of the IDEAL CUSTOMER PROFILE: a prospect inside them is in ICP even outside US/UK/Europe/UAE or the five listed industries. The chosen roles replace the decision-maker list. If revenue is "any", never disqualify on revenue.
 - Still set fits_ticket_threshold=false for a clearly wrong kind of business, a person who is not a decision maker, or a company that looks closed.
 
 CLASSIFY:
-- recommended_service: the ONE service this prospect needs most. If <offering> is set, prefer that service when the audit supports it. Otherwise choose the closest service named in the user message, or one of WEB_ECOM, DIGITAL_MARKETING, STAFF_AUG, MANAGED_IT.
-- qualification_score 0–100: business fit + location + website/SEO/social/technology opportunity + contactability. 80 or above means high priority.
-- opportunity_reason: 1–2 sentences on WHY this company may buy, using only verified facts. If a signal is unknown, say it is unknown. Do not invent ERP, RFID, or social stats.
-- estimated_ticket_usd: integer per the ticket guidance.
-- fits_ticket_threshold: true only if estimated_ticket_usd >= 1000 AND the prospect matches the ICP.
-- pain_point_tag: max 4 words naming the verified problem, e.g. "No conversion tracking", "Slow mobile pages", "No own website", "Security headers missing", "Outdated site code". Never "Wasted ad spend" unless the audit shows they run ads.
-- pain_point_detail: 1–2 factual sentences using verified evidence.
+- recommended_service: the service LINE name from <our_services> that offer_service belongs to.
+- qualification_score 0-100: business fit + location + verified opportunity + contactability. 80 or above means high priority.
+- opportunity_reason: 1-2 sentences on WHY this company may buy, using only verified facts.
+- estimated_ticket_usd: integer per the ticket guidance. fits_ticket_threshold: true only if estimated_ticket_usd >= 1000 AND the prospect matches the ICP.
 
-WRITE THE 4-STEP EMAIL SEQUENCE (plain text, US/UK business English):
-- You write as Jay from <brand> (TapadiaTech or Expert in SEO). Never write "BrandFly" in an email; name the company only as <brand>, and only when it reads naturally.
-- Each email is placed inside a branded HTML template that already has the signature (Jay T, <brand>), a "Book a free consultation" button with the booking link, and the footer. So: start with "Hi <first name>," on its own line, write short paragraphs separated by one blank line, do NOT add a sign-off, signature, sender name or footer, and do NOT paste the booking link or any URL. To invite them, refer to "the button below" or ask for a short reply.
-- Email 1 (Day 0): subject <= 7 words, no clickbait. Opens with the specific verified pain hook, one sentence of value (fixed-price, fixed-scope, fast, zero downtime), then ONE CTA: a free 30-minute Google Meet (the button below). Write "Google Meet", never "call". <= 110 words.
-- Email 2 (Day 3): fixed-price / ROI case study angle using ONLY <case_studies> (or the engagement model if none). Same CTA. <= 100 words.
-- Email 3 (Day 7): technical bottleneck reminder — name the specific technical issue still unresolved and the compounding cost of waiting. Same CTA. <= 90 words.
-- Email 4 (Day 11): polite breakup email, low-pressure, leaves the door open, mentions the button once. <= 70 words.
-- Each email must be self-contained, reference the prospect's company by name, and never repeat the same opening line.
-- Subjects for emails 2–4 should read naturally (do not use "Re:" or "Fwd:").
+ALSO PRODUCE for the closer (meeting dossier): 3 tailored discovery questions, 3 talking points, and a 2-3 sentence dossier_summary.
 
-ALSO PRODUCE for the closer (for the meeting dossier): 3 tailored discovery questions, 3 talking points, and a 2–3 sentence dossier_summary.
-
-OUTPUT JSON SCHEMA (exact keys; business_summary is REQUIRED and comes first):
+OUTPUT JSON SCHEMA (exact keys; business_summary, offer_service and offer_line are REQUIRED):
 {
   "business_summary": string,
+  "offer_service": string,
+  "offer_line": string,
   "fits_ticket_threshold": boolean,
   "disqualify_reason": string | null,
   "estimated_ticket_usd": integer,
@@ -101,6 +117,39 @@ OUTPUT JSON SCHEMA (exact keys; business_summary is REQUIRED and comes first):
   "dossier_summary": string
 }
 `.trim();
+
+/**
+ * Checks one AI-written sequence against the email rules. Returns the problems found (empty = fine). Shared by the
+ * lead lane (which asks the AI to fix a failing sequence once) and tests.
+ */
+export const EMAIL_RULES_JS = String.raw`
+const BANNED_SUBJECT = /\b(enhanc\w*|optimi[sz]\w*|boost\w*|unlock\w*|elevat\w*|transform\w*|maximi[sz]\w*|supercharg\w*|revolutioni[sz]\w*)\b|online presence|digital marketing strategy|[!?]|^(re|fwd):/i;
+const JARGON = /\b(GA4|google analytics 4|meta pixel|pixel|tag manager|GTM|HSTS|CSP|content[- ]security[- ]policy|security headers?|LCP|largest contentful paint|pagespeed|jquery|tech stack|attribut\w+ conversions?|conversions? (cannot|can't) be attributed)\b/i;
+const BOILERPLATE = /fixed[- ]price,? fixed[- ]scope|fast delivery cycles|zero downtime|enhance your (online|digital) presence|next level|hope this (email )?finds you/i;
+const BAD_TAG = /unknown|status|reachab|performance unknown/i;
+const PUSHY = /last chance|final chance|don.t miss|act now|limited time/i;
+const B2B = /\b(software|platform|saas|consult\w*|agency|industrial|manufactur\w*|wholesale|b2b|developers?|enterprise|logistics|engineering|fintech|for (businesses|companies|developers))\b/i;
+function emailProblems(ai, firstName) {
+  const p = [];
+  const emails = Array.isArray(ai.emails) ? ai.emails : [];
+  if (!ai.offer_service || !ai.offer_line) p.push('offer_service and offer_line are required');
+  if (BAD_TAG.test(String(ai.pain_point_tag || ''))) p.push('pain_point_tag must name their business problem, not that our check failed');
+  if (/ads/i.test(String(ai.offer_service || '')) && B2B.test(String(ai.business_summary || ''))) p.push('this is a B2B company ("' + ai.business_summary + '"): choose a website, lead-generation, SEO or software offer instead of ads');
+  const e1 = String((emails[0] && emails[0].body) || '').trim().split(/\n\s*\n/).filter(x => x.trim());
+  if (e1.length < 4) p.push('email 1 must be the greeting plus 3 short paragraphs separated by blank lines');
+  if (/we offer [a-z &/]+:/i.test(emails.map(e => e && e.body).join(' '))) p.push('write the offer in natural words, do not paste "We offer <service>:"');
+  const subjects = emails.map(e => String(e && e.subject || '').trim().toLowerCase());
+  if (new Set(subjects).size !== subjects.length) p.push('all 4 subjects must be different');
+  emails.forEach((e, k) => {
+    const s = String(e && e.subject || ''), b = String(e && e.body || '');
+    if (BANNED_SUBJECT.test(s) || PUSHY.test(s)) p.push('email ' + (k + 1) + ' subject uses a banned, salesy or pushy word: "' + s + '"');
+    if (s.split(/\s+/).filter(Boolean).length > 7) p.push('email ' + (k + 1) + ' subject is longer than 6 words');
+    const j = (s + ' ' + b).match(JARGON); if (j) p.push('email ' + (k + 1) + ' uses technical jargon "' + j[0] + '"; say what it means for them instead');
+    const bp = b.match(BOILERPLATE); if (bp) p.push('email ' + (k + 1) + ' uses the banned phrase "' + bp[0] + '"');
+  });
+  return p;
+}
+`;
 
 export const CLASSIFY_REPLY_SYSTEM = `
 You classify replies to BrandFly cold emails (web & e-commerce development, digital marketing, staff augmentation, managed IT). Return ONLY JSON.

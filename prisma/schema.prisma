@@ -24,6 +24,7 @@ model Lead {
   companyWebsite      String?  @map("company_website")
   country             String
   region              String // US | UK | EUROPE | UAE
+  timezone            String? // IANA zone of the prospect (from city/state, else country); time buttons use it
   industry            String // ECOMMERCE_RETAIL | FINTECH | REAL_ESTATE_LOGISTICS | EDTECH | HOSPITALITY
   employeeCount       Int?     @map("employee_count")
   annualRevenue       Int      @map("annual_revenue") // USD, $100k – $10M ICP window
