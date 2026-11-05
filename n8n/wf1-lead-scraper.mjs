@@ -190,6 +190,7 @@ return [{ json: { aiArkSearch, apifyInput, ctx: {
   customIndustries,
   anyRevenue: body.anyRevenue === true,
   campaignId: ['4238486','4238487','4238488','4238489','4238491'].includes(String(body.campaignId || '')) ? String(body.campaignId) : '4238486',
+  runId: typeof body.runId === 'string' && /^[0-9a-f-]{36}$/i.test(body.runId) ? body.runId : null, // dashboard progress card
 } } }];
 `,
   );
@@ -742,7 +743,7 @@ const sourced = $('Normalize + ICP Hard Filter').all().length;
 const fresh = $('Drop Existing Leads').all().length;
 const valid = $('Verified Emails').all().length;
 const qualified = $('Prepare DB Record').all().length;
-return [{ json: { event: 'batch_finished', ingest: false, data: { source: ctx.source, provider: ctx.provider || 'ai-ark', region: ctx.region, industry: ctx.industry,
+return [{ json: { event: 'batch_finished', ingest: false, data: { runId: ctx.runId || null, source: ctx.source, provider: ctx.provider || 'ai-ark', region: ctx.region, industry: ctx.industry,
   sourced, new_leads: fresh, valid_emails: valid, qualified, rejected: sourced - qualified } } }];
 `,
   );
@@ -751,6 +752,19 @@ return [{ json: { event: 'batch_finished', ingest: false, data: { source: ctx.so
   ifNode(w, "AI Ark Already Verified?", [10.5, 0], "={{ $json.preverified === true }}");
   code(w, "Keep Preverified Email", [11.5, -1], "return $input.all().map(i => ({ json: i.json }));");
   w.add("Verified Emails", "n8n-nodes-base.merge", 3, [12.5, 0], { mode: "append" });
+
+  /* ── live progress for the dashboard's Launch card (side branches: they never change the items of the main chain) ── */
+  const progress = (name, pos, from, data, output = 0) => {
+    dashboardNotify(w, name, pos, "={{ JSON.stringify({ event: 'launch_progress', ingest: false, data: Object.assign({ runId: $('Build ICP Query').first().json.ctx.runId }, " + data + ") }) }}");
+    w.nodes.find((n) => n.name === name).executeOnce = true;
+    w.connect(from, name, output);
+  };
+  progress("Progress: Searching", [1.5, -1.6], "Build ICP Query", "{ stage: 'searching' }");
+  progress("Progress: Found (Apify)", [4, -1.6], "Split Apify Leads", "{ stage: 'filtering', found: $('Split Apify Leads').all().length }");
+  progress("Progress: Found (AI Ark)", [4, 1.6], "Split AI Ark People", "{ stage: 'filtering', found: $('Split AI Ark People').all().length }");
+  progress("Progress: Checking Websites", [12.5, -1.6], "Verified Emails", "{ stage: 'checking', passed: $('Verified Emails').all().length }");
+  progress("Progress: Writing Emails", [14.5, -1.6], "Site Audit Extract", "{ stage: 'writing', writing: $('Site Audit Extract').all().length }");
+  progress("Progress: Adding To Smartlead", [18.5, -1.6], "Qualified? (Ticket >= $1,000)", "{ stage: 'adding', qualified: $('Qualified? (Ticket >= $1,000)').all(0).length }");
 
   /* ── wiring ── */
   w.connect("Build ICP Query", "Use Apify?");

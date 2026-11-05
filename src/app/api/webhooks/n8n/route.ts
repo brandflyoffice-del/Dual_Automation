@@ -79,7 +79,7 @@ const leadUpsert = z.object({
 });
 
 const envelope = z.object({
-  event: z.enum(["ping", "lead_synced", "email_event", "meeting_synced", "batch_finished"]),
+  event: z.enum(["ping", "lead_synced", "email_event", "meeting_synced", "batch_finished", "launch_progress"]),
   ingest: z.boolean().default(false),
   data: z.record(z.string(), z.any()).default({}),
 });
@@ -106,7 +106,26 @@ export async function POST(req: Request) {
       case "ping":
         return NextResponse.json({ ok: true, pong: true });
 
+      case "launch_progress": {
+        // n8n reports a stage of a Launch run: searching / filtering (found) / checking (passed) / writing / adding.
+        const id = typeof data.runId === "string" ? data.runId : "";
+        const STAGES = ["searching", "filtering", "checking", "writing", "adding"];
+        if (id && STAGES.includes(String(data.stage))) {
+          const n = (v: unknown) => (Number.isFinite(Number(v)) ? Math.max(0, Math.round(Number(v))) : undefined);
+          await db.launchRun
+            .update({ where: { id }, data: { stage: String(data.stage), found: n(data.found), passed: n(data.passed), writing: n(data.writing), qualified: n(data.qualified) } })
+            .catch(() => {});
+          publish({ type: "launch_progress", title: "", detail: String(data.stage) });
+        }
+        return NextResponse.json({ ok: true });
+      }
+
       case "batch_finished": {
+        if (typeof data.runId === "string" && data.runId) {
+          await db.launchRun
+            .update({ where: { id: data.runId }, data: { status: "done", stage: "done", qualified: Number(data.qualified) || 0, message: "", finishedAt: new Date() } })
+            .catch(() => {});
+        }
         const via = data.provider === "apify" ? "Apify" : data.provider === "ai-ark" ? "AI Ark" : "Lead search";
         publish({ type: event, title: "Scraper batch finished", detail: `${via} · ${data.qualified ?? "?"} qualified · ${data.rejected ?? "?"} rejected` });
         break;

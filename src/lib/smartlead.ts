@@ -288,3 +288,46 @@ export async function replyInThread(
     reply_email_body: quotedHtml,
   });
 }
+
+// ---------- controls (Email Analytics buttons) ----------
+
+/** Turns warm-up on or off for one mailbox, keeping its current warm-up numbers (Smartlead defaults when it has none). */
+export async function setWarmup(mailboxId: string, enabled: boolean): Promise<void> {
+  const rows = await sl<Record<string, unknown>[]>("GET", "/email-accounts/?offset=0&limit=100");
+  const row = (Array.isArray(rows) ? rows : []).find((r) => String(r.id) === mailboxId);
+  if (!row) throw new SmartleadError("Mailbox not found in Smartlead", 404);
+  const w = (row.warmup_details ?? {}) as Record<string, unknown>;
+  await sl("POST", `/email-accounts/${mailboxId}/warmup`, {
+    warmup_enabled: enabled,
+    total_warmup_per_day: num(w.warmup_max_count) || num(w.max_email_per_day) || 20,
+    daily_rampup: num(w.rampup_value) || 2,
+    reply_rate_percentage: num(w.reply_rate) || 30,
+  });
+  dropCache("mailboxes");
+}
+
+export async function campaignMailboxIds(campaignId: string): Promise<string[]> {
+  const rows = await sl<{ id: number | string }[]>("GET", `/campaigns/${campaignId}/email-accounts`);
+  return (Array.isArray(rows) ? rows : []).map((r) => String(r.id));
+}
+
+/**
+ * Starts or pauses sending for one campaign. Starting attaches every connected mailbox first when the campaign has
+ * none (Smartlead cannot send without one). Smartlead's own error text is passed back if it refuses.
+ */
+export async function setSending(campaignId: string, on: boolean): Promise<{ attached: number }> {
+  let attached = 0;
+  if (on) {
+    const current = await campaignMailboxIds(campaignId);
+    if (!current.length) {
+      const boxes = (await listMailboxes()).filter((m) => m.smtpOk && m.imapOk).map((m) => Number(m.id));
+      if (!boxes.length) throw new SmartleadError("No connected mailbox to send from");
+      await sl("POST", `/campaigns/${campaignId}/email-accounts`, { email_account_ids: boxes });
+      attached = boxes.length;
+    }
+  }
+  await sl("POST", `/campaigns/${campaignId}/status`, { status: on ? "START" : "PAUSED" });
+  dropCache("campaigns");
+  dropCache(`analytics:${campaignId}`);
+  return { attached };
+}

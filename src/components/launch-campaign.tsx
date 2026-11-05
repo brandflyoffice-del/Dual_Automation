@@ -467,7 +467,8 @@ export function LaunchCampaign({ className, compact = false }: { className?: str
       });
       const json = await res.json().catch(() => ({}));
       if (res.ok) {
-        toast.success("Campaign launched", { description: `${limit} leads · ${summary[2].value} · results appear on the Leads page as they are found.` });
+        toast.success("Campaign launched", { description: `${limit} leads · ${summary[2].value} · follow the progress card at the bottom right.` });
+        window.dispatchEvent(new Event("launch:started"));
         setOpen(false);
       } else {
         toast.error("Campaign not started", { description: json.message ?? json.error ?? "Unknown error" });

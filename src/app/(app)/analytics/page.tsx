@@ -9,6 +9,8 @@ import { DailyEmailChart } from "@/components/charts";
 import { db } from "@/lib/db";
 import { campaignStats, dayWiseStats, listCampaigns, listMailboxes, smartleadConfigured, type SlCampaignStats, type SlDay, type SlMailbox } from "@/lib/smartlead";
 import { cn, formatPct, safePct } from "@/lib/utils";
+import { config } from "@/lib/config";
+import { CampaignSendingButton, SendingSwitch, ToolLinks, WarmupButton } from "@/components/analytics/controls";
 
 export const dynamic = "force-dynamic";
 
@@ -124,6 +126,24 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
         </Card>
       ) : null}
 
+      {configured && !data?.error && (
+        <div className="mb-4 space-y-2">
+          <SendingSwitch active={stats.filter((c) => c.status === "ACTIVE").length} campaigns={stats.length} leadsWaiting={notStarted} />
+          <ToolLinks
+            links={[
+              { label: "Smartlead campaigns", href: "https://app.smartlead.ai/app/email-campaigns" },
+              { label: "Smartlead mailboxes", href: "https://app.smartlead.ai/app/email-accounts" },
+              { label: "Smartlead inbox", href: "https://app.smartlead.ai/app/master-inbox" },
+              { label: "Apify runs", href: "https://console.apify.com/actors/runs" },
+              { label: "n8n workflow", href: `${(process.env.N8N_PUBLIC_URL || "https://n8n.zmart.cloud").replace(/\/$/, "")}/workflow/fenebrisAutopilot01` },
+              { label: "Cal.com bookings", href: "https://app.cal.com/bookings/upcoming" },
+              { label: "Google Calendar", href: config.calendarUrl },
+              { label: "Google Sheet", href: config.sheetUrl },
+            ]}
+          />
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <Kpi label="Emails sent" value={String(sent)} sub={`last ${days} days, all campaigns`} icon={Send} />
         <Kpi label="Replies" value={String(replied)} sub={`${formatPct(safePct(replied, sent))} reply rate`} icon={MessageSquareReply} tone="emerald" />
@@ -213,7 +233,8 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                 <th className="py-2 pr-3 text-right font-medium">Replies</th>
                 <th className="py-2 pr-3 text-right font-medium">Reply rate</th>
                 <th className="py-2 pr-3 text-right font-medium">Bounced</th>
-                <th className="py-2 text-right font-medium">Unsub.</th>
+                <th className="py-2 pr-3 text-right font-medium">Unsub.</th>
+                <th className="py-2 text-right font-medium">Sending</th>
               </tr>
             </thead>
             <tbody>
@@ -233,12 +254,18 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                   <td className="py-2.5 pr-3 text-right font-metric">{c.replies}</td>
                   <td className="py-2.5 pr-3 text-right font-metric">{formatPct(safePct(c.replies, c.uniqueSent || c.sent))}</td>
                   <td className="py-2.5 pr-3 text-right font-metric">{c.bounces}</td>
-                  <td className="py-2.5 text-right font-metric">{c.unsubscribed}</td>
+                  <td className="py-2.5 pr-3 text-right font-metric">{c.unsubscribed}</td>
+                  <td className="py-2.5 text-right">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <CampaignSendingButton campaignId={c.id} status={c.status} leads={c.leads.total} />
+                      <a href={`https://app.smartlead.ai/app/email-campaign/${c.id}/analytics`} target="_blank" rel="noopener noreferrer" className="text-[11px] text-muted-foreground hover:text-foreground hover:underline">Open</a>
+                    </div>
+                  </td>
                 </tr>
               ))}
               {!data?.stats.length && (
                 <tr>
-                  <td colSpan={10} className="py-6 text-center text-muted-foreground">No campaigns found.</td>
+                  <td colSpan={11} className="py-6 text-center text-muted-foreground">No campaigns found.</td>
                 </tr>
               )}
             </tbody>
@@ -248,7 +275,10 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
 
       <Card className="mt-4">
         <CardHeader>
-          <CardTitle>Sending mailboxes</CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle>Sending mailboxes</CardTitle>
+            <WarmupButton on />
+          </div>
           <CardDescription>
             {data?.mailboxes.length ?? 0} connected · {sentToday} of {capacity} emails sent today. Warm-up keeps new mailboxes out of spam; leave it on.
           </CardDescription>
@@ -280,7 +310,10 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                     {m.sentToday} / {m.dailyLimit}
                   </td>
                   <td className="py-2.5 pr-3">
-                    {m.warmup ? <Badge variant={m.warmup.status === "ACTIVE" ? "emerald" : "amber"}>{m.warmup.status === "ACTIVE" ? "On" : m.warmup.status}</Badge> : <Badge variant="outline">Off</Badge>}
+                    <div className="flex items-center gap-1.5">
+                      {m.warmup ? <Badge variant={m.warmup.status === "ACTIVE" ? "emerald" : "amber"}>{m.warmup.status === "ACTIVE" ? "On" : m.warmup.status}</Badge> : <Badge variant="outline">Off</Badge>}
+                      <WarmupButton mailboxId={m.id} on={m.warmup?.status === "ACTIVE"} />
+                    </div>
                   </td>
                   <td className="py-2.5 pr-3 text-right font-metric">{m.warmup?.reputation || "–"}</td>
                   <td className="py-2.5 pr-3 text-right font-metric">{m.warmup ? `${m.warmup.sent} / ${m.warmup.spam}` : "–"}</td>

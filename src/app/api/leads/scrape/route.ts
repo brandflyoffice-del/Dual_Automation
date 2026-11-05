@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { callN8n, n8nWebhooks } from "@/lib/config";
+import { db } from "@/lib/db";
 import { EMPLOYEE_RANGES, EUROPE_COUNTRIES, ICP, ROLE_IDS, SERVICES } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
@@ -52,6 +53,11 @@ export async function POST(req: Request) {
     triggeredAt: new Date().toISOString(),
     source: "dashboard",
   };
-  const res = await callN8n(n8nWebhooks.scraperBatch, payload);
-  return NextResponse.json({ ...res, payload }, { status: res.ok ? 202 : res.status === 0 ? 503 : 502 });
+  // A run row lets the dashboard show live progress; n8n reports each stage against its id.
+  const run = await db.launchRun
+    .create({ data: { name: parsed.data.name ?? "", provider: parsed.data.provider ?? "ai-ark", campaignId: parsed.data.campaignId ?? null, target: parsed.data.limit ?? 0, stage: "searching" } })
+    .catch(() => null);
+  const res = await callN8n(n8nWebhooks.scraperBatch, { ...payload, runId: run?.id ?? null });
+  if (run && !res.ok) await db.launchRun.update({ where: { id: run.id }, data: { status: "failed", stage: "failed", message: res.message, finishedAt: new Date() } }).catch(() => {});
+  return NextResponse.json({ ...res, payload, runId: run?.id ?? null }, { status: res.ok ? 202 : res.status === 0 ? 503 : 502 });
 }

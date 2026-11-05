@@ -142,3 +142,25 @@ model AppSetting {
 
   @@map("app_settings")
 }
+
+/// One Launch campaign run, so the dashboard can show live progress (n8n reports each stage).
+model LaunchRun {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String    @default("")
+  provider   String    @default("apify")
+  campaignId String?   @map("campaign_id")
+  target     Int       @default(0)
+  stage      String    @default("queued") // queued | searching | filtering | checking | writing | adding | done | failed
+  found      Int       @default(0)
+  passed     Int       @default(0)
+  writing    Int       @default(0)
+  qualified  Int       @default(0)
+  status     String    @default("running") // running | done | failed
+  message    String    @default("")
+  startedAt  DateTime  @default(now()) @map("started_at") @db.Timestamptz
+  updatedAt  DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  finishedAt DateTime? @map("finished_at") @db.Timestamptz
+
+  @@index([startedAt])
+  @@map("launch_runs")
+}
