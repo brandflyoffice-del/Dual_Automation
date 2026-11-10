@@ -238,8 +238,7 @@ return people.map(p => ({ json: { personId: p.id } }));
     [4, 2.6],
     String.raw`
 // Every launch skips (1) everyone Apify returned in earlier runs of this actor ("Skip people from earlier runs":
-// those people are not delivered or charged again) and (2) every company already in the dashboard. Apify is asked
-// for about twice the target because roughly half of its rows fail the ICP filter.
+// those people are not delivered or charged again) and (2) every company already in the dashboard.
 const base = $('Build ICP Query').first().json;
 const ctx = base.ctx;
 const input = { ...base.apifyInput };
@@ -257,7 +256,9 @@ try {
   datasets = alive.filter(Boolean);
 } catch (e) { /* no run history: search without it */ }
 if (datasets.length) input.excludeDatasets = datasets;
-input.maxResults = Math.min(200, Math.max(ctx.limit * 2, ctx.limit + 10));
+// Every Apify row is paid for and kept (its own filters are trusted), so only a small margin is needed for the rows
+// that still drop: no company domain, a personal address, the per-company cap, a dead mail domain.
+input.maxResults = Math.min(200, Math.ceil(ctx.limit * 1.2));
 return [{ json: { ...base, apifyInput: input, skipped: { companies: domains.length, earlierRuns: datasets.length } } }];
 `,
   );
@@ -281,7 +282,7 @@ for (const it of $input.all()) {
   else if (j) rows.push(j);
 }
 const leads = rows.filter(r => r && r.email && (!r._status || r._status === 'found') && !r.error); // actor marks good rows _status "found", bad ones "skipped_*"
-// Apify is asked for about twice the target (roughly half fail the ICP filter); "Drop Existing Leads" cuts to the target.
+// Apify is asked for a small margin over the target; "Drop Existing Leads" cuts to the target.
 return leads.slice(0, 200).map(r => ({ json: { apify: r } }));
 `,
   );
@@ -321,7 +322,10 @@ const pushLead = (lead) => {
   const region = NAME_TO_REGION[String(lead.country || '').toLowerCase()] || (lead.country ? 'OTHER' : null);
   const namedPlace = Array.isArray(ctx.places) && ctx.places.length > 0;
   if (!namedPlace && (!region || !ctx.regionsSel.includes(region))) return;
-  if (!roleOk(lead.role || '')) return;
+  // Apify already matched the roles (in every language: "Geschäftsführer", "Fondatore", "Inhaber"...) and the
+  // industries (sub-industries included) and charged for each row, so its rows are not re-checked against the
+  // English-only role list; that threw away a third of every paid search. The AI qualification step still decides fit.
+  if (!lead.trusted && !roleOk(lead.role || '')) return;
   const employees = Number(lead.employeeCount || 0);
   if (employees && (employees < ctx.sizeMin || employees > ctx.sizeMax)) return;
   const annual = Number(lead.annualRevenue || 0);
@@ -333,7 +337,9 @@ const pushLead = (lead) => {
     // The search already filtered by the one chosen industry; a lead whose text names none is kept under its OWN industry
     // (e.g. "Software Development"), never relabelled as the chosen one (that mislabelled software firms as shops).
     || (ctx.industriesSel.length === 1 && !customRx.length ? (String(lead.industryRaw || '').trim().slice(0, 60) || ctx.industriesSel[0]) : null)
-    || (!ctx.industriesSel.length && customRx.length && !hay.replace(/[\s,]/g, '') ? customRx[0].label : null);
+    || (!ctx.industriesSel.length && customRx.length && !hay.replace(/[\s,]/g, '') ? customRx[0].label : null)
+    // An Apify row whose industry text names none of ours keeps its own industry ("Insurance", "Manufacturing").
+    || (lead.trusted ? (String(lead.industryRaw || '').trim().slice(0, 60) || ctx.industriesSel[0] || (customRx[0] && customRx[0].label) || 'Other') : null);
   if (!industry) return;
   const domain = String(lead.domain || '').toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
   if (!domain) return;
@@ -366,7 +372,7 @@ for (const it of $input.all()) {
     const country = CODE_TO_COUNTRY[String(a.countryCode || '').toLowerCase()] || String(a.country || '').trim();
     // First number that passes the numbering-plan check (country code, length, real US area code); junk is dropped.
     const phone = [a.phone].concat(Array.isArray(a.phones) ? a.phones : []).map(x => cleanPhone(x && typeof x === 'object' ? (x.number || x.phone) : x, a.countryCode)).find(Boolean) || null;
-    pushLead({ phone,
+    pushLead({ phone, trusted: true,
       email, firstName: a.firstName || '', lastName: a.lastName || '', role: a.jobTitle || a.primaryTitle || '',
       linkedinUrl: a.linkedinUrl || null, companyName: a.companyName || '', domain: a.companyDomain || '',
       country, employeeCount: staffCount(a.companySize), annualRevenue: 0, sourceId: a.personId || null,
