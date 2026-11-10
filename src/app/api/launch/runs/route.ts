@@ -22,7 +22,14 @@ export async function GET() {
   for (const r of runs) {
     let run = r;
     if (r.status === "running" && Date.now() - r.updatedAt.getTime() > QUIET_MS) {
-      run = await db.launchRun.update({ where: { id: r.id }, data: { status: "done", stage: "done", message: QUIET_MESSAGE[r.stage] ?? "Finished.", finishedAt: new Date() } });
+      // The counts say why a filtering stage ended empty: nobody matched, or everyone who matched is already in the list.
+      const message =
+        r.stage === "filtering" && r.matched > 0 && r.known >= r.matched
+          ? `All ${r.matched} people who matched your filters are already in your list. Launch again (earlier people are skipped) or widen places, industries or roles.`
+          : r.stage === "filtering" && r.found > 0 && r.matched === 0 // n8n reports "matched" whenever at least one lead matched
+            ? `None of the ${r.found} people found matched your places, roles, sizes and industries. Try wider filters.`
+            : (QUIET_MESSAGE[r.stage] ?? "Finished.");
+      run = await db.launchRun.update({ where: { id: r.id }, data: { status: "done", stage: "done", message, finishedAt: new Date() } });
     }
     // Leads saved by this run (the lead lane writes them with the run's campaign and source as it goes).
     const added = await db.lead.count({

@@ -114,7 +114,7 @@ export async function POST(req: Request) {
         if (id && STAGES.includes(String(data.stage))) {
           const n = (v: unknown) => (Number.isFinite(Number(v)) ? Math.max(0, Math.round(Number(v))) : undefined);
           await db.launchRun
-            .update({ where: { id }, data: { stage: String(data.stage), found: n(data.found), passed: n(data.passed), writing: n(data.writing), qualified: n(data.qualified), removed: n(data.removed) } })
+            .update({ where: { id }, data: { stage: String(data.stage), found: n(data.found), passed: n(data.passed), writing: n(data.writing), qualified: n(data.qualified), removed: n(data.removed), matched: n(data.matched), known: n(data.known) } })
             .catch(() => {});
           publish({ type: "launch_progress", title: "", detail: String(data.stage) });
         }

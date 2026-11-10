@@ -154,6 +154,8 @@ model LaunchRun {
   stage      String    @default("queued") // queued | searching | filtering | checking | writing | adding | done | failed
   found      Int       @default(0)
   passed     Int       @default(0)
+  matched    Int       @default(0) // passed the ICP filter (places, roles, sizes, industries)
+  known      Int       @default(0) // of those, already in the list (skipped)
   writing    Int       @default(0)
   qualified  Int       @default(0)
   removed    Int       @default(0) // leads dropped because their email domain cannot receive mail

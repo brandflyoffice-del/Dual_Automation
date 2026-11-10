@@ -223,6 +223,44 @@ return people.map(p => ({ json: { personId: p.id } }));
   });
 
   ifNode(w, "Use Apify?", [3.5, 1.2], "={{ $json.ctx.provider === 'apify' }}");
+  // Without these, the same filters return the same people every launch, all already in the list ("no new leads").
+  postgres(
+    w,
+    "DB: Known Companies",
+    [3.5, 2.6],
+    "SELECT coalesce(json_agg(d), '[]'::json) AS domains FROM (SELECT d FROM (SELECT lower(company_domain) AS d, max(created_at) AS t FROM leads WHERE coalesce(company_domain, '') <> '' GROUP BY 1) x ORDER BY t DESC LIMIT 1000) y;",
+    null,
+    { alwaysOutput: true, once: true },
+  );
+  code(
+    w,
+    "Apify: Skip Known People",
+    [4, 2.6],
+    String.raw`
+// Every launch skips (1) everyone Apify returned in earlier runs of this actor ("Skip people from earlier runs":
+// those people are not delivered or charged again) and (2) every company already in the dashboard. Apify is asked
+// for about twice the target because roughly half of its rows fail the ICP filter.
+const base = $('Build ICP Query').first().json;
+const ctx = base.ctx;
+const input = { ...base.apifyInput };
+const helpers = this.helpers;
+const actor = String($env.APIFY_ACTOR_ID).replace('/', '~');
+const token = $env.APIFY_TOKEN;
+const domains = (($input.first().json || {}).domains || []).map(d => String(d).toLowerCase()).filter(d => /^[a-z0-9.-]+\.[a-z]{2,}$/.test(d)).slice(0, 1000);
+if (domains.length) input.excludeCompanyDomains = domains;
+let datasets = [];
+try {
+  const r = await helpers.httpRequest({ method: 'GET', url: 'https://api.apify.com/v2/acts/' + actor + '/runs', qs: { token, desc: 1, limit: 100, status: 'SUCCEEDED' }, json: true, timeout: 20000 });
+  const ids = [...new Set(((r.data && r.data.items) || []).map(x => x.defaultDatasetId).filter(Boolean))];
+  // A dataset past Apify's retention is gone; only pass the ones that still exist.
+  const alive = await Promise.all(ids.map(id => helpers.httpRequest({ method: 'GET', url: 'https://api.apify.com/v2/datasets/' + id, qs: { token }, json: true, timeout: 10000 }).then(() => id).catch(() => null)));
+  datasets = alive.filter(Boolean);
+} catch (e) { /* no run history: search without it */ }
+if (datasets.length) input.excludeDatasets = datasets;
+input.maxResults = Math.min(200, Math.max(ctx.limit * 2, ctx.limit + 10));
+return [{ json: { ...base, apifyInput: input, skipped: { companies: domains.length, earlierRuns: datasets.length } } }];
+`,
+  );
   http(w, "Apify: Run Leads Finder", [4.5, 2.2], {
     url: "=https://api.apify.com/v2/acts/{{ $env.APIFY_ACTOR_ID }}/run-sync-get-dataset-items?token={{ $env.APIFY_TOKEN }}&timeout=300",
     json: "={{ JSON.stringify($json.apifyInput) }}",
@@ -243,7 +281,8 @@ for (const it of $input.all()) {
   else if (j) rows.push(j);
 }
 const leads = rows.filter(r => r && r.email && (!r._status || r._status === 'found') && !r.error); // actor marks good rows _status "found", bad ones "skipped_*"
-return leads.slice(0, ctx.limit).map(r => ({ json: { apify: r } }));
+// Apify is asked for about twice the target (roughly half fail the ICP filter); "Drop Existing Leads" cuts to the target.
+return leads.slice(0, 200).map(r => ({ json: { apify: r } }));
 `,
   );
 
@@ -788,13 +827,16 @@ return leads.filter(i => ok[String(i.json.email || '').split('@')[1].toLowerCase
   progress("Progress: Searching", [1.5, -1.6], "Build ICP Query", "{ stage: 'searching' }");
   progress("Progress: Found (Apify)", [4, -1.6], "Split Apify Leads", "{ stage: 'filtering', found: $('Split Apify Leads').all().length }");
   progress("Progress: Found (AI Ark)", [4, 1.6], "Split AI Ark People", "{ stage: 'filtering', found: $('Split AI Ark People').all().length }");
+  progress("Progress: Already Known", [8, -1.6], "DB: Existing Leads Check", "{ stage: 'filtering', matched: $('Normalize + ICP Hard Filter').all().length, known: $('DB: Existing Leads Check').all().filter(i => i.json && i.json.email).length }");
   progress("Progress: Checking Websites", [12.5, -1.6], "Verified Emails", "{ stage: 'checking', passed: $('Verified Emails').all().length, removed: Math.max(0, $('Drop Existing Leads').all().length - $('Verified Emails').all().length) }");
   progress("Progress: Writing Emails", [14.5, -1.6], "Site Audit Extract", "{ stage: 'writing', writing: $('Site Audit Extract').all().length }");
   progress("Progress: Adding To Smartlead", [18.5, -1.6], "Qualified? (Ticket >= $1,000)", "{ stage: 'adding', qualified: $('Qualified? (Ticket >= $1,000)').all(0).length }");
 
   /* ── wiring ── */
   w.connect("Build ICP Query", "Use Apify?");
-  w.connect("Use Apify?", "Apify: Run Leads Finder", 0);
+  w.connect("Use Apify?", "DB: Known Companies", 0);
+  w.connect("DB: Known Companies", "Apify: Skip Known People");
+  w.connect("Apify: Skip Known People", "Apify: Run Leads Finder");
   w.connect("Use Apify?", "AI Ark: People Search", 1);
   w.connect("Apify: Run Leads Finder", "Split Apify Leads");
   w.connect("Split Apify Leads", "Normalize + ICP Hard Filter");

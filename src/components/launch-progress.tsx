@@ -19,6 +19,8 @@ type Run = {
   writing: number;
   qualified: number;
   removed?: number;
+  matched?: number;
+  known?: number;
   added: number;
   status: "running" | "done" | "failed";
   message: string;
@@ -41,7 +43,16 @@ function steps(r: Run) {
   const via = r.provider === "apify" ? "Apify" : "AI Ark";
   return [
     { label: `Searching ${via} for decision makers`, detail: r.found ? `${r.found} people found${r.target ? ` (target ${r.target})` : ""}` : `Target ${r.target} leads` },
-    { label: "Filtering to your places, roles and sizes", detail: r.passed ? `${r.passed} passed` : r.found ? `Checking ${r.found} people` : "" },
+    {
+      label: "Filtering to your places, roles and sizes",
+      detail: r.matched
+        ? `${r.matched} matched${r.known ? ` · ${r.known} already in your list` : ""}`
+        : r.passed
+          ? `${r.passed} passed`
+          : r.found
+            ? `Checking ${r.found} people`
+            : "",
+    },
     {
       label: "Checking emails and websites",
       detail: [r.writing ? `${r.writing} websites read` : r.passed ? `${r.passed} leads` : "", r.removed ? `${r.removed} removed: email domain does not accept mail` : ""].filter(Boolean).join(" · "),
