@@ -432,7 +432,8 @@ return out.filter(row => {
     String.raw`
 const existing = new Set($input.all().map(i => i.json.email).filter(Boolean));
 const ctx = $('Build ICP Query').first().json.ctx;
-return $('Normalize + ICP Hard Filter').all().filter(i => !existing.has(i.json.email)).slice(0, ctx.limit);
+// Apify rows are already paid for (and skipped forever after this run), so all of them go on; AI Ark is cut to the target.
+return $('Normalize + ICP Hard Filter').all().filter(i => !existing.has(i.json.email)).slice(0, ctx.provider === 'apify' ? 200 : ctx.limit);
 `,
   );
 
