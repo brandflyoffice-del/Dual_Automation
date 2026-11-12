@@ -111,6 +111,14 @@ export async function POST(req: Request) {
         // n8n reports a stage of a Launch run: searching / filtering (found) / checking (passed) / writing / adding.
         const id = typeof data.runId === "string" ? data.runId : "";
         const STAGES = ["searching", "filtering", "checking", "writing", "adding"];
+        if (id && data.stage === "failed") {
+          // A step that cannot go on (e.g. Apify rejected the token): the card shows the reason instead of "no people found".
+          await db.launchRun
+            .update({ where: { id }, data: { status: "failed", stage: "failed", message: String(data.message ?? "The launch failed.").slice(0, 300), finishedAt: new Date() } })
+            .catch(() => {});
+          publish({ type: "launch_progress", title: "", detail: "failed" });
+          return NextResponse.json({ ok: true });
+        }
         if (id && STAGES.includes(String(data.stage))) {
           const n = (v: unknown) => (Number.isFinite(Number(v)) ? Math.max(0, Math.round(Number(v))) : undefined);
           await db.launchRun

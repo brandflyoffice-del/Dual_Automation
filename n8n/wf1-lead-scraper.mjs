@@ -266,7 +266,9 @@ return [{ json: { ...base, apifyInput: input, skipped: { companies: domains.leng
     url: "=https://api.apify.com/v2/acts/{{ $env.APIFY_ACTOR_ID }}/run-sync-get-dataset-items?token={{ $env.APIFY_TOKEN }}&timeout=300",
     json: "={{ JSON.stringify($json.apifyInput) }}",
     timeout: 300000,
-    onError: "stopWorkflow",
+    // The error item goes on to "Split Apify Leads", which reports the real reason to the progress card (a rejected
+    // token used to look like "the search returned no people").
+    onError: "continueRegularOutput",
   });
   code(
     w,
@@ -282,6 +284,23 @@ for (const it of $input.all()) {
   else if (j) rows.push(j);
 }
 const leads = rows.filter(r => r && r.email && (!r._status || r._status === 'found') && !r.error); // actor marks good rows _status "found", bad ones "skipped_*"
+// A failed Apify call (bad token, no credit, timeout) ends the run with its real reason on the progress card.
+const failed = rows.find(r => r && r.error);
+if (!leads.length && failed) {
+  const e = failed.error;
+  const text = [typeof e === 'string' ? e : (e.message || ''), (e && e.description) || ''].join(' ').trim();
+  const reason = /authoriz|authentic|token|401|user.*not found/i.test(text)
+    ? 'Apify refused our login: the Apify API token is no longer valid (regenerated, deleted or account changed). A new token has to be set before searching.'
+    : /credit|payment|usage|limit|402|403/i.test(text)
+      ? 'Apify refused the search: the Apify account is out of credit or over its plan limit.'
+      : 'The Apify search failed: ' + text.slice(0, 200);
+  try {
+    await this.helpers.httpRequest({ method: 'POST', url: $env.DASHBOARD_URL + '/api/webhooks/n8n', json: true, timeout: 15000,
+      headers: { 'x-fenebris-secret': $env.DASHBOARD_WEBHOOK_SECRET, 'content-type': 'application/json' },
+      body: { event: 'launch_progress', ingest: false, data: { runId: ctx.runId, stage: 'failed', message: reason } } });
+  } catch (err) { /* the dashboard closes the run itself after 8 quiet minutes */ }
+  return [];
+}
 // Apify is asked for a small margin over the target; "Drop Existing Leads" cuts to the target.
 return leads.slice(0, 200).map(r => ({ json: { apify: r } }));
 `,
