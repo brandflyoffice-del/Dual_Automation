@@ -310,7 +310,9 @@ function apiFailReason(service, e) {
   const text = [typeof e === 'string' ? e : ((e && e.message) || ''), (e && e.description) || ''].join(' ').trim();
   if (/authoriz|authentic|token|api.?key|401|user.*not found|invalid key|unauthor/i.test(text)) return service + ' refused our login: its API key is no longer valid (regenerated, deleted or account changed). Put the new key in Settings > Integrations and launch again.';
   if (/credit|payment|usage|insufficient|quota|402|403|429/i.test(text)) return service + ' refused the request: the account is out of credit, over its plan limit or rate-limited.';
-  return service + ' did not answer properly: ' + text.slice(0, 180);
+  if (/not.?found|404/i.test(text)) return service + ' could not find what we asked for (for Apify: the lead finder in Settings > Integrations is wrong or was removed).';
+  const inner = (text.match(/\\?"message\\?"\s*:\s*\\?"([^"\\]{3,200})/) || [])[1];
+  return service + ' did not answer properly: ' + (inner || text).slice(0, 180);
 }
 `;
 
