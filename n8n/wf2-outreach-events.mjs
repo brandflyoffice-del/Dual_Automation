@@ -1,4 +1,4 @@
-import { Workflow, webhook, respond, respondHtml, ifNode, switchNode, http, code, postgres, sticky, dashboardNotify, smartleadUrl, googleCalendarIdNode, calExpr, DASH, PG_CRED_ID, PG_CRED_NAME } from "./lib.mjs";
+import { Workflow, webhook, respond, respondHtml, ifNode, switchNode, http, code, postgres, sticky, dashboardNotify, smartleadUrl, googleCalendarIdNode, calExpr, DASH, PG_CRED_ID, PG_CRED_NAME , keysNode, keyExpr } from "./lib.mjs";
 import { CLASSIFY_REPLY_SYSTEM, DRAFT_REPLY_TEMPLATE, PRICE_TOKEN, STARTING_PRICE } from "./prompts.mjs";
 import { SIGN_JS, FMT_JS, PAGE_JS } from "./helpers.mjs";
 import { COUNTRIES } from "./targeting.mjs";
@@ -147,6 +147,7 @@ return out;
   /* ═════ Entry A: outreach platform events ═════ */
   // responseNode (not onReceived): n8n refuses onReceived when a Respond node is downstream, and the slot-booking path ends in one.
   webhook(w, "Webhook: Outreach Events (Instantly / Smartlead)", [0, 0], "fenebris-outreach-events");
+  keysNode(w, "Keys: Events", [1, -1.4], "Webhook: Outreach Events (Instantly / Smartlead)"); // API keys from Settings > Integrations
   respond(w, "Respond 200 (events)", [1.5, -0.6], 200, '{"ok": true}');
   respond(w, "Respond 401 (events)", [1.5, 0.6], 401, '{"error": "unauthorized"}');
   ifNode(w, "Authorized Event?", [1, 0], "={{ !!$env.DASHBOARD_WEBHOOK_SECRET && ($json.headers['x-fenebris-secret'] === $env.DASHBOARD_WEBHOOK_SECRET || ($json.body && $json.body.secret_key === $env.DASHBOARD_WEBHOOK_SECRET) || ($json.query && $json.query.secret_key === $env.DASHBOARD_WEBHOOK_SECRET)) }}");
@@ -228,13 +229,13 @@ const evAt = new Date(ev.occurredAt || 0).getTime();
 if ((lead.conversation || []).some(c => new Date(c.at).getTime() > evAt + 1000)) return [];
 const sent = (lead.sent_emails || []).filter(e => e.step <= ev.step).pop() || {};
 const user = '<our_last_email subject="' + (sent.subject || '') + '">\n' + (sent.body || '') + '\n</our_last_email>\n<prospect_reply>\n' + (ev.body || '(empty reply)') + '\n</prospect_reply>';
-return [{ json: { classifyRequest: { model: $env.OPENAI_MODEL || 'gpt-4o', temperature: 0, response_format: { type: 'json_object' },
+return [{ json: { classifyRequest: { model: ${keyExpr("OPENAI_MODEL")} || 'gpt-4o', temperature: 0, response_format: { type: 'json_object' },
   messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: user }] } } }];
 `,
   );
   http(w, "AI: Classify Reply (Sentiment)", [6, -1], {
     url: "https://api.openai.com/v1/chat/completions",
-    headers: { Authorization: "=Bearer {{ $env.OPENAI_API_KEY }}", "content-type": "application/json" },
+    headers: { Authorization: `=Bearer {{ ${keyExpr("OPENAI_API_KEY")} }}`, "content-type": "application/json" },
     json: "={{ JSON.stringify($json.classifyRequest) }}",
     timeout: 60000,
   });
@@ -362,7 +363,7 @@ return [{ json: { ctx: { ...ctx, tz }, qs: { start: iso(now), end: iso(now + 9 *
   http(w, "Cal.com: Get Open Slots", [12, -1], {
     method: "GET",
     url: "https://api.cal.com/v2/slots",
-    headers: { Authorization: "=Bearer {{ $env.CAL_API_KEY }}", "cal-api-version": "2024-09-04" },
+    headers: { Authorization: `=Bearer {{ ${keyExpr("CAL_API_KEY")} }}`, "cal-api-version": "2024-09-04" },
     query: { eventTypeId: "={{ $env.CAL_EVENT_TYPE_ID }}", start: "={{ $json.qs.start }}", end: "={{ $json.qs.end }}", timeZone: "={{ $json.qs.timeZone }}" },
     timeout: 30000,
   });
@@ -478,13 +479,13 @@ const user =
   '<time_buttons>' + (offered.length ? offered.map(s => s.label).join(' ; ') : 'none, only the booking link') + '</time_buttons>\n' +
   '<booking_link>' + booking + '</booking_link>\n<case_studies>' + (($env.CASE_STUDIES) || '') + '</case_studies>\n' +
   '<brand>' + JSON.stringify(brand) + '</brand>\n<lead_stage>' + (ctx.lead.stage || '') + '</lead_stage>';
-return [{ json: { ctx: { ...ctx, approvedPrice: PRICE, promptSource: customPrompt ? 'dashboard' : 'built-in', brand, signOff, offered, openIsos: openList.map(s => s.iso), openLabels: Object.fromEntries(openList.map(s => [s.iso, s.label])), publicBase, busyCount: busy.length }, draftRequest: { model: $env.OPENAI_MODEL || 'gpt-4o', temperature: 0.3, response_format: { type: 'json_object' },
+return [{ json: { ctx: { ...ctx, approvedPrice: PRICE, promptSource: customPrompt ? 'dashboard' : 'built-in', brand, signOff, offered, openIsos: openList.map(s => s.iso), openLabels: Object.fromEntries(openList.map(s => [s.iso, s.label])), publicBase, busyCount: busy.length }, draftRequest: { model: ${keyExpr("OPENAI_MODEL")} || 'gpt-4o', temperature: 0.3, response_format: { type: 'json_object' },
   messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: user }] } } }];
 `,
   );
   http(w, "AI: Draft Booking Reply", [15, -1], {
     url: "https://api.openai.com/v1/chat/completions",
-    headers: { Authorization: "=Bearer {{ $env.OPENAI_API_KEY }}", "content-type": "application/json" },
+    headers: { Authorization: `=Bearer {{ ${keyExpr("OPENAI_API_KEY")} }}`, "content-type": "application/json" },
     json: "={{ JSON.stringify($('Build Reply Request').first().json.draftRequest) }}",
     timeout: 90000,
   });
@@ -609,6 +610,7 @@ return [{ json: { bk: { source: 'chat', email: String(c.event.email).toLowerCase
 
   // Entry 2: clicked a time button in the email (GET, the link carries email + start + signature)
   webhook(w, "Webhook: Slot Link", [0, 8], "fenebris-pick-slot", { method: "GET" });
+  keysNode(w, "Keys: Slot Link", [1, 6.9], "Webhook: Slot Link");
   code(
     w,
     "Verify Slot Link",
@@ -718,7 +720,7 @@ return [{ json: { bk, free, already, reason: already ? 'a meeting is already boo
   ifNode(w, "Slot Still Free?", [21, -2.6], "={{ $json.free === true }}");
   http(w, "Cal.com: Create Booking", [22, -3.2], {
     url: "https://api.cal.com/v2/bookings",
-    headers: { Authorization: "=Bearer {{ $env.CAL_API_KEY }}", "cal-api-version": "2026-02-25", "content-type": "application/json" },
+    headers: { Authorization: `=Bearer {{ ${keyExpr("CAL_API_KEY")} }}`, "cal-api-version": "2026-02-25", "content-type": "application/json" },
     json: "={{ JSON.stringify({ start: $json.bk.startIso, eventTypeId: Number($env.CAL_EVENT_TYPE_ID), attendee: { name: $json.bk.name, email: $json.bk.email, timeZone: $json.bk.tz, language: 'en' }, metadata: { source: 'brandfly-ai-reply' } }) }}",
     timeout: 40000,
   });
@@ -972,6 +974,7 @@ return [{ json: $input.first().json }];
 
   /* ═════ Entry B: dashboard lead control ═════ */
   webhook(w, "Webhook: Lead Control (Dashboard)", [0, 5], "fenebris-lead-control");
+  keysNode(w, "Keys: Lead Control", [1, 3.9], "Webhook: Lead Control (Dashboard)");
   ifNode(w, "Authorized Control?", [1, 5], "={{ !!$env.DASHBOARD_WEBHOOK_SECRET && $json.headers['x-fenebris-secret'] === $env.DASHBOARD_WEBHOOK_SECRET }}");
   respond(w, "Respond OK", [2, 4.4], 200, '{"ok": true}');
   respond(w, "Respond 401", [2, 5.8], 401, '{"error": "unauthorized"}');

@@ -1,26 +1,15 @@
 // Server-only Smartlead client for the dashboard's Inbox and Email Analytics pages (never import from client components).
-// The API key comes from SMARTLEAD_API_KEY or the n8n config file (mounted read-only into the dashboard container).
+// The API key comes from Settings > Integrations, else SMARTLEAD_API_KEY or the n8n config file (src/lib/integrations.ts).
 // Only whitelisted fields leave this file: Smartlead's email-account rows include SMTP/IMAP passwords.
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { integrationValue } from "@/lib/integrations";
 
 const API = "https://server.smartlead.ai/api/v1";
 
-let cachedKey: string | null | undefined;
-function apiKey(): string | null {
-  if (cachedKey !== undefined) return cachedKey;
-  const env = process.env.SMARTLEAD_API_KEY?.trim();
-  if (env) return (cachedKey = env);
-  try {
-    const cfg = JSON.parse(readFileSync(join(process.cwd(), "n8n", "config.local.json"), "utf8")) as { SMARTLEAD_API_KEY?: string };
-    cachedKey = cfg.SMARTLEAD_API_KEY?.trim() || null;
-  } catch {
-    cachedKey = null;
-  }
-  return cachedKey;
+async function apiKey(): Promise<string | null> {
+  return (await integrationValue("SMARTLEAD_API_KEY")) || null;
 }
 
-export const smartleadConfigured = () => !!apiKey();
+export const smartleadConfigured = async () => !!(await apiKey());
 
 export class SmartleadError extends Error {
   constructor(message: string, readonly status = 0) {
@@ -29,7 +18,7 @@ export class SmartleadError extends Error {
 }
 
 async function sl<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
-  const key = apiKey();
+  const key = await apiKey();
   if (!key) throw new SmartleadError("Smartlead API key is not configured");
   const url = `${API}${path}${path.includes("?") ? "&" : "?"}api_key=${encodeURIComponent(key)}`;
   let res: Response;

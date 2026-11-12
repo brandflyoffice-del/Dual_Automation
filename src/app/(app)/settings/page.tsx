@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { Bot, CalendarCheck2, Palette } from "lucide-react";
+import { Bot, CalendarCheck2, KeyRound, Palette } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { PromptEditor } from "@/components/settings/prompt-editor";
 import { BrandSettings } from "@/components/settings/brand-settings";
 import { MeetingAlerts } from "@/components/settings/meeting-alerts";
+import { IntegrationsSettings } from "@/components/settings/integrations-settings";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +13,7 @@ const TABS = [
   { id: "prompt", label: "AI reply prompt", detail: "How the AI answers replies", icon: Bot },
   { id: "brand", label: "Brand & logo", detail: "Logo and dashboard name", icon: Palette },
   { id: "meetings", label: "Meeting alerts", detail: "Who gets invited to meetings", icon: CalendarCheck2 },
+  { id: "integrations", label: "Integrations", detail: "API keys: Apify, Smartlead, OpenAI...", icon: KeyRound },
 ] as const;
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
@@ -19,8 +21,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const tab = TABS.find((t) => t.id === raw)?.id ?? "prompt";
   return (
     <>
-      <PageHeader title="Settings" description="Change how the AI answers, the logo, and who hears about booked meetings. Saved changes apply straight away, no deploy needed." />
-      <nav aria-label="Settings sections" className="mb-6 grid grid-cols-3 gap-1 rounded-xl border border-border bg-card p-1 shadow-card sm:gap-1.5 sm:p-1.5">
+      <PageHeader title="Settings" description="Change how the AI answers, the logo, who hears about booked meetings, and the API keys. Saved changes apply straight away, no deploy needed." />
+      <nav aria-label="Settings sections" className="mb-6 grid grid-cols-2 gap-1 sm:grid-cols-4 rounded-xl border border-border bg-card p-1 shadow-card sm:gap-1.5 sm:p-1.5">
         {TABS.map(({ id, label, detail, icon: Icon }) => {
           const on = tab === id;
           return (
@@ -52,6 +54,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       {tab === "prompt" && <PromptEditor />}
       {tab === "brand" && <BrandSettings />}
       {tab === "meetings" && <MeetingAlerts />}
+      {tab === "integrations" && <IntegrationsSettings />}
     </>
   );
 }

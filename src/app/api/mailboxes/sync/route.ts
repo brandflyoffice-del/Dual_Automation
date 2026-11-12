@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 /** Imports every SMTP/IMAP mailbox connected in Smartlead, so it is used for answers and watched for replies. */
 export async function POST() {
-  if (!smartleadConfigured()) return NextResponse.json({ error: "Smartlead is not connected" }, { status: 503 });
+  if (!(await smartleadConfigured())) return NextResponse.json({ error: "Smartlead is not connected" }, { status: 503 });
   try {
     const r = await syncFromSmartlead();
     dropMailboxCache();

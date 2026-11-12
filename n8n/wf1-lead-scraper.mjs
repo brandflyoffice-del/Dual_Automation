@@ -1,4 +1,4 @@
-import { Workflow, webhook, respond, ifNode, http, code, postgres, noop, sticky, dashboardNotify, smartleadUrl, PG_CRED_ID, PG_CRED_NAME, REPORT_JS } from "./lib.mjs";
+import { Workflow, webhook, respond, ifNode, http, code, postgres, noop, sticky, dashboardNotify, smartleadUrl, PG_CRED_ID, PG_CRED_NAME, REPORT_JS, keysNode, keyExpr } from "./lib.mjs";
 import { QUALIFY_AND_SEQUENCE_SYSTEM, EMAIL_RULES_JS } from "./prompts.mjs";
 import { DEFAULT_SERVICE_LINES, DEFAULT_DELIVER, BRAND_FACTS } from "./services.mjs";
 import { COUNTRIES, EMPLOYEE_BUCKETS, EUROPE_CORE, ROLE_CATALOG, TZ_FROM_LOCATION_JS } from "./targeting.mjs";
@@ -23,6 +23,7 @@ export function buildWorkflow1() {
 
   /* ── triggers ── */
   webhook(w, "Webhook: Scraper Batch (Dashboard)", [0, 0], "fenebris-scraper-batch");
+  keysNode(w, "Keys: Scraper", [1, -1.4], "Webhook: Scraper Batch (Dashboard)"); // API keys from Settings > Integrations
   ifNode(w, "Authorized?", [1, 0], "={{ $json.headers['x-fenebris-secret'] === $env.DASHBOARD_WEBHOOK_SECRET && !!$env.DASHBOARD_WEBHOOK_SECRET }}");
   respond(w, "Respond 202 Accepted", [2, -0.5], 202, '{"accepted": true, "workflow": "Fenebris_01_Lead_Scraper_And_AI_Enrichment"}');
   respond(w, "Respond 401 Unauthorized", [2, 0.6], 401, '{"error": "unauthorized"}');
@@ -199,7 +200,7 @@ return [{ json: { aiArkSearch, apifyInput, ctx: {
 
   http(w, "AI Ark: People Search", [4, 0], {
     url: "https://api.ai-ark.com/api/developer-portal/v1/people",
-    headers: { "X-TOKEN": "={{ $env.AI_ARK_API_KEY }}", "content-type": "application/json" },
+    headers: { "X-TOKEN": `={{ ${keyExpr("AI_ARK_API_KEY")} }}`, "content-type": "application/json" },
     json: "={{ JSON.stringify($json.aiArkSearch) }}",
     timeout: 60000,
     onError: "continueRegularOutput", // the error item reaches "Split AI Ark People", which reports the reason
@@ -221,7 +222,7 @@ return people.map(p => ({ json: { personId: p.id } }));
   );
   http(w, "AI Ark: Export Verified Email", [6, 0], {
     url: "https://api.ai-ark.com/api/developer-portal/v1/people/export/single",
-    headers: { "X-TOKEN": "={{ $env.AI_ARK_API_KEY }}", "content-type": "application/json" },
+    headers: { "X-TOKEN": `={{ ${keyExpr("AI_ARK_API_KEY")} }}`, "content-type": "application/json" },
     json: "={{ JSON.stringify({ id: $json.personId }) }}",
     timeout: 60000,
     batching: [2, 400],
@@ -248,8 +249,8 @@ const base = $('Build ICP Query').first().json;
 const ctx = base.ctx;
 const input = { ...base.apifyInput };
 const helpers = this.helpers;
-const actor = String($env.APIFY_ACTOR_ID).replace('/', '~');
-const token = $env.APIFY_TOKEN;
+const actor = String(${keyExpr("APIFY_ACTOR_ID")}).replace('/', '~');
+const token = ${keyExpr("APIFY_TOKEN")};
 const domains = (($input.first().json || {}).domains || []).map(d => String(d).toLowerCase()).filter(d => /^[a-z0-9.-]+\.[a-z]{2,}$/.test(d)).slice(0, 1000);
 if (domains.length) input.excludeCompanyDomains = domains;
 let datasets = [];
@@ -268,7 +269,7 @@ return [{ json: { ...base, apifyInput: input, skipped: { companies: domains.leng
 `,
   );
   http(w, "Apify: Run Leads Finder", [4.5, 2.2], {
-    url: "=https://api.apify.com/v2/acts/{{ $env.APIFY_ACTOR_ID }}/run-sync-get-dataset-items?token={{ $env.APIFY_TOKEN }}&timeout=300",
+    url: `=https://api.apify.com/v2/acts/{{ String(${keyExpr("APIFY_ACTOR_ID")}).replace('/', '~') }}/run-sync-get-dataset-items?token={{ ${keyExpr("APIFY_TOKEN")} }}&timeout=300`,
     json: "={{ JSON.stringify($json.apifyInput) }}",
     timeout: 300000,
     // The error item goes on to "Split Apify Leads", which reports the real reason to the progress card (a rejected
@@ -456,7 +457,7 @@ return $('Normalize + ICP Hard Filter').all().filter(i => !existing.has(i.json.e
   http(w, "Abstract: Validate Email", [10, 0], {
     method: "GET",
     url: "https://emailvalidation.abstractapi.com/v1/",
-    query: { api_key: "={{ $env.EMAIL_VALIDATION_API_KEY }}", email: "={{ $json.email }}" },
+    query: { api_key: `={{ ${keyExpr("EMAIL_VALIDATION_API_KEY")} }}`, email: "={{ $json.email }}" },
     timeout: 30000,
     batching: [3, 1100],
   });
@@ -495,7 +496,7 @@ return out;
       url: "={{ $('Verified Emails').all()[$itemIndex].json.companyWebsite }}",
       strategy: "mobile",
       category: "performance",
-      key: "={{ $env.PAGESPEED_API_KEY }}",
+      key: `={{ ${keyExpr("PAGESPEED_API_KEY")} }}`,
     },
     timeout: 90000,
     batching: [3, 1500],
@@ -635,14 +636,14 @@ return $('Site Audit Extract').all().map(it => {
     '<ticket_gate>' + ($env.TICKET_GATE === 'off' ? 'off' : 'on') + '</ticket_gate>\n' +
     '<campaign_targeting>' + JSON.stringify({ places: ctx.places || [], industries: (ctx.industriesSel || []).concat(ctx.customIndustries || []),
       roles: ctx.roles || [], revenue: ctx.anyRevenue ? 'any' : '100k-10M', offering: ctx.offering || null }) + '</campaign_targeting>';
-  return { json: { ...l, llmRequest: { model: $env.OPENAI_MODEL || 'gpt-4o', temperature: 0.4, response_format: { type: 'json_object' },
+  return { json: { ...l, llmRequest: { model: ${keyExpr("OPENAI_MODEL")} || 'gpt-4o', temperature: 0.4, response_format: { type: 'json_object' },
     messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: user }] } } };
 });
 `,
   );
   http(w, "AI: Qualify + Generate 4-Step Sequence", [16, 0], {
     url: "https://api.openai.com/v1/chat/completions",
-    headers: { Authorization: "=Bearer {{ $env.OPENAI_API_KEY }}", "content-type": "application/json" },
+    headers: { Authorization: `=Bearer {{ ${keyExpr("OPENAI_API_KEY")} }}`, "content-type": "application/json" },
     json: "={{ JSON.stringify($json.llmRequest) }}",
     timeout: 120000,
     batching: [3, 1500],
@@ -668,7 +669,7 @@ const out = [];
 const helpers = this.helpers;
 async function fixSequence(req, original, problems) {
   const r = await helpers.httpRequest({ method: 'POST', url: 'https://api.openai.com/v1/chat/completions', json: true, timeout: 90000,
-    headers: { Authorization: 'Bearer ' + $env.OPENAI_API_KEY, 'content-type': 'application/json' },
+    headers: { Authorization: 'Bearer ' + ${keyExpr("OPENAI_API_KEY")}, 'content-type': 'application/json' },
     body: { ...req, temperature: 0.3, messages: [...req.messages, { role: 'assistant', content: original },
       { role: 'user', content: 'Your JSON breaks these rules:\n- ' + problems.join('\n- ') + '\nFix every one and return the complete JSON again (same keys). Keep the facts; change only the wording.' }] } });
   return JSON.parse(r.choices[0].message.content);

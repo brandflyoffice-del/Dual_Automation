@@ -1,10 +1,9 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { EMPLOYEE_RANGES, ICP, INDUSTRY_LABEL, ROLE_OPTIONS } from "@/lib/constants";
 import { CITY_LIST, COUNTRY_BY_CODE, COUNTRY_LIST, INDUSTRY_SUGGESTIONS, type PlacePick } from "@/lib/places";
 import { getSetting } from "@/lib/settings";
+import { integrationValue } from "@/lib/integrations";
 
 export const dynamic = "force-dynamic";
 
@@ -36,16 +35,10 @@ export type AiFill = {
   model: boolean;
 };
 
-function openAi(): { key: string; model: string } | null {
-  const fromEnv = process.env.OPENAI_API_KEY?.trim();
-  if (fromEnv) return { key: fromEnv, model: process.env.OPENAI_MODEL?.trim() || "gpt-4o" };
-  try {
-    const cfg = JSON.parse(readFileSync(join(process.cwd(), "n8n", "config.local.json"), "utf8")) as { OPENAI_API_KEY?: string; OPENAI_MODEL?: string };
-    const key = cfg.OPENAI_API_KEY?.trim();
-    return key ? { key, model: cfg.OPENAI_MODEL?.trim() || "gpt-4o" } : null;
-  } catch {
-    return null;
-  }
+// Settings > Integrations first, else the server config (src/lib/integrations.ts).
+async function openAi(): Promise<{ key: string; model: string } | null> {
+  const key = await integrationValue("OPENAI_API_KEY");
+  return key ? { key, model: (await integrationValue("OPENAI_MODEL")) || "gpt-4o" } : null;
 }
 
 const CORE_KEYS = ICP.industries as readonly string[];
@@ -120,7 +113,7 @@ export async function POST(req: Request) {
   const parsed = schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Write a sentence first, e.g. Find 50 jewellery companies in Hyderabad" }, { status: 400 });
   const text = parsed.data.text;
-  const ai = openAi();
+  const ai = await openAi();
   if (!ai) return NextResponse.json(fallback(text));
 
   const lines = (await getSetting("service_lines")).value;

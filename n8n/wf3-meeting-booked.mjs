@@ -1,4 +1,4 @@
-import { Workflow, webhook, respond, ifNode, http, code, postgres, sticky, dashboardNotify, smartleadUrl, uid, googleCalendarIdNode, calExpr, PG_CRED_ID, PG_CRED_NAME } from "./lib.mjs";
+import { Workflow, webhook, respond, ifNode, http, code, postgres, sticky, dashboardNotify, smartleadUrl, uid, googleCalendarIdNode, calExpr, PG_CRED_ID, PG_CRED_NAME , keysNode, keyExpr } from "./lib.mjs";
 
 export const SHEET_TAB = "Scheduled Meetings";
 export const SHEET_COLUMNS = [
@@ -472,6 +472,7 @@ return [{ json: { id, campaignId } }];
 
   /* wiring A */
   w.connect("Webhook: Cal.com Booking", "Verify Cal.com Signature");
+  keysNode(w, "Keys: Cal Booking", [1, -1.4], "Webhook: Cal.com Booking"); // Smartlead key from Settings > Integrations
   w.connect("Verify Cal.com Signature", "Authorized?");
   w.connect("Authorized?", "Respond 200", 0);
   w.connect("Authorized?", "Respond 401", 1);

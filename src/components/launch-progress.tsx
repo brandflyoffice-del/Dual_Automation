@@ -196,7 +196,7 @@ export function LaunchProgress() {
                 <X className="size-3.5" /> Launch failed
               </div>
               <div className="mt-0.5 text-foreground/80">{run.message || "The launch stopped with an error."}</div>
-              <Link href="/settings#integrations" className="mt-2 inline-block font-medium text-rose-700 hover:underline">
+              <Link href="/settings?tab=integrations" className="mt-2 inline-block font-medium text-rose-700 hover:underline">
                 Check API keys in Settings
               </Link>
             </div>

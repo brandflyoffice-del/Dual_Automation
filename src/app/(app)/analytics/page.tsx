@@ -73,7 +73,7 @@ async function load(days: number) {
 export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<{ days?: string }> }) {
   const sp = await searchParams;
   const days = RANGES.includes(Number(sp.days) as (typeof RANGES)[number]) ? Number(sp.days) : 30;
-  const configured = smartleadConfigured();
+  const configured = await smartleadConfigured();
   const data = configured ? await load(days) : null;
 
   const sum = (k: keyof Omit<SlDay, "date">) => (data?.daily ?? []).reduce((a, d) => a + d[k], 0);

@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 // Every prospect Smartlead has emailed, newest activity first, joined with our AI intent and stage.
 export async function GET() {
-  if (!smartleadConfigured()) return NextResponse.json({ error: "Smartlead API key is not configured", conversations: [] }, { status: 503 });
+  if (!(await smartleadConfigured())) return NextResponse.json({ error: "Smartlead API key is not configured", conversations: [] }, { status: 503 });
   try {
     return NextResponse.json({ conversations: await getConversations() });
   } catch (e) {

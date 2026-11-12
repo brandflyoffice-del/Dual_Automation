@@ -272,6 +272,28 @@ export function sticky(w, content, pos, size = [520, 260], color = 5) {
 }
 
 /**
+ * Run-time API keys (dashboard Settings > Integrations). Each entry point that calls a paid API has a "Keys: ..." node
+ * right after its trigger (placed above it, so n8n's v1 order runs it first) that GETs the active keys from the
+ * dashboard (/api/internal/integrations). `keyExpr(K)` is the expression/JS for the active value: the first executed
+ * Keys node's value, else the value baked from config at build time (also the fallback when the dashboard is down).
+ */
+export const KEY_NODES = ["Keys: Scraper", "Keys: Events", "Keys: Slot Link", "Keys: Lead Control", "Keys: Cal Booking"];
+export const keyExpr = (k) => `(${KEY_NODES.map((n) => `($('${n}').isExecuted ? ($('${n}').first().json.${k} || '') : '')`).join(" || ")} || $env.${k})`;
+export function keysNode(w, name, pos, trigger) {
+  if (!KEY_NODES.includes(name)) throw new Error(`keysNode: add "${name}" to KEY_NODES`);
+  http(w, name, pos, {
+    method: "GET",
+    url: "={{ $env.DASHBOARD_URL }}/api/internal/integrations",
+    headers: { "x-fenebris-secret": "={{ $env.DASHBOARD_WEBHOOK_SECRET }}" },
+    timeout: 8000,
+  });
+  const n = w.nodes.find((x) => x.name === name);
+  n.executeOnce = true;
+  n.alwaysOutputData = true;
+  w.connect(trigger, name);
+}
+
+/**
  * Code-node helpers for the Launch progress card. `reportRun(helpers, runId, 'failed'|'stopped', message)` ends the run
  * with a reason; `apiFailReason(service, error)` turns an HTTP error item into plain words (bad key, no credit, other).
  */
@@ -302,4 +324,4 @@ export const dashboardNotify = (w, name, pos, jsonExpr) =>
 
 /** Smartlead authenticates with ?api_key=, not a bearer header. */
 export const smartleadUrl = (path) =>
-  `=https://server.smartlead.ai/api/v1${path}${path.includes("?") ? "&" : "?"}api_key={{ $env.SMARTLEAD_API_KEY }}`;
+  `=https://server.smartlead.ai/api/v1${path}${path.includes("?") ? "&" : "?"}api_key={{ ${keyExpr("SMARTLEAD_API_KEY")} }}`;

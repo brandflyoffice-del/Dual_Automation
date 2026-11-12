@@ -34,7 +34,7 @@ const body = z.object({
  * use "Sign in with Google/Microsoft" must be connected in Smartlead itself, then imported with "Sync from Smartlead".
  */
 export async function POST(req: Request) {
-  if (!smartleadConfigured()) return NextResponse.json({ error: "Smartlead is not connected" }, { status: 503 });
+  if (!(await smartleadConfigured())) return NextResponse.json({ error: "Smartlead is not connected" }, { status: 503 });
   const parsed = body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Fill in every field (ports are numbers)" }, { status: 400 });
   const d = parsed.data;
