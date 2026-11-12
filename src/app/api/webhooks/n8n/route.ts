@@ -111,12 +111,17 @@ export async function POST(req: Request) {
         // n8n reports a stage of a Launch run: searching / filtering (found) / checking (passed) / writing / adding.
         const id = typeof data.runId === "string" ? data.runId : "";
         const STAGES = ["searching", "filtering", "checking", "writing", "adding"];
-        if (id && data.stage === "failed") {
-          // A step that cannot go on (e.g. Apify rejected the token): the card shows the reason instead of "no people found".
+        if (id && (data.stage === "failed" || data.stage === "stopped")) {
+          // "failed": a step could not go on (e.g. Apify rejected the token). "stopped": it worked but nothing new came
+          // back. Either way the run keeps the stage it reached, so the card ticks only the steps really passed.
+          const failed = data.stage === "failed";
           await db.launchRun
-            .update({ where: { id }, data: { status: "failed", stage: "failed", message: String(data.message ?? "The launch failed.").slice(0, 300), finishedAt: new Date() } })
+            .update({
+              where: { id },
+              data: { status: failed ? "failed" : "done", message: String(data.message ?? (failed ? "The launch failed." : "No new leads.")).slice(0, 300), finishedAt: new Date() },
+            })
             .catch(() => {});
-          publish({ type: "launch_progress", title: "", detail: "failed" });
+          publish({ type: "launch_progress", title: "", detail: String(data.stage) });
           return NextResponse.json({ ok: true });
         }
         if (id && STAGES.includes(String(data.stage))) {

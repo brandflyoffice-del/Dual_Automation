@@ -1,4 +1,4 @@
-import { Workflow, webhook, respond, ifNode, http, code, postgres, noop, sticky, dashboardNotify, smartleadUrl, PG_CRED_ID, PG_CRED_NAME } from "./lib.mjs";
+import { Workflow, webhook, respond, ifNode, http, code, postgres, noop, sticky, dashboardNotify, smartleadUrl, PG_CRED_ID, PG_CRED_NAME, REPORT_JS } from "./lib.mjs";
 import { QUALIFY_AND_SEQUENCE_SYSTEM, EMAIL_RULES_JS } from "./prompts.mjs";
 import { DEFAULT_SERVICE_LINES, DEFAULT_DELIVER, BRAND_FACTS } from "./services.mjs";
 import { COUNTRIES, EMPLOYEE_BUCKETS, EUROPE_CORE, ROLE_CATALOG, TZ_FROM_LOCATION_JS } from "./targeting.mjs";
@@ -202,15 +202,20 @@ return [{ json: { aiArkSearch, apifyInput, ctx: {
     headers: { "X-TOKEN": "={{ $env.AI_ARK_API_KEY }}", "content-type": "application/json" },
     json: "={{ JSON.stringify($json.aiArkSearch) }}",
     timeout: 60000,
-    onError: "stopWorkflow",
+    onError: "continueRegularOutput", // the error item reaches "Split AI Ark People", which reports the reason
   });
   code(
     w,
     "Split AI Ark People",
     [5, 0],
-    String.raw`
+    REPORT_JS + String.raw`
 const ctx = $('Build ICP Query').first().json.ctx;
-const people = ($input.first().json.content || []).filter(p => p && p.id).slice(0, ctx.limit);
+const first = $input.first().json || {};
+const people = (first.content || []).filter(p => p && p.id).slice(0, ctx.limit);
+if (!people.length) {
+  if (first.error) await reportRun(this.helpers, ctx.runId, 'failed', apiFailReason('AI Ark', first.error));
+  else await reportRun(this.helpers, ctx.runId, 'stopped', 'AI Ark found no people for these filters. Try wider places, industries or roles.');
+}
 return people.map(p => ({ json: { personId: p.id } }));
 `,
   );
@@ -274,7 +279,7 @@ return [{ json: { ...base, apifyInput: input, skipped: { companies: domains.leng
     w,
     "Split Apify Leads",
     [5.5, 2.2],
-    String.raw`
+    REPORT_JS + String.raw`
 const ctx = $('Build ICP Query').first().json.ctx;
 const rows = [];
 for (const it of $input.all()) {
@@ -284,21 +289,12 @@ for (const it of $input.all()) {
   else if (j) rows.push(j);
 }
 const leads = rows.filter(r => r && r.email && (!r._status || r._status === 'found') && !r.error); // actor marks good rows _status "found", bad ones "skipped_*"
-// A failed Apify call (bad token, no credit, timeout) ends the run with its real reason on the progress card.
+// A failed Apify call (bad token, no credit, timeout) ends the run with its real reason on the progress card; an
+// empty search says so too (it used to look the same as a failure).
 const failed = rows.find(r => r && r.error);
-if (!leads.length && failed) {
-  const e = failed.error;
-  const text = [typeof e === 'string' ? e : (e.message || ''), (e && e.description) || ''].join(' ').trim();
-  const reason = /authoriz|authentic|token|401|user.*not found/i.test(text)
-    ? 'Apify refused our login: the Apify API token is no longer valid (regenerated, deleted or account changed). A new token has to be set before searching.'
-    : /credit|payment|usage|limit|402|403/i.test(text)
-      ? 'Apify refused the search: the Apify account is out of credit or over its plan limit.'
-      : 'The Apify search failed: ' + text.slice(0, 200);
-  try {
-    await this.helpers.httpRequest({ method: 'POST', url: $env.DASHBOARD_URL + '/api/webhooks/n8n', json: true, timeout: 15000,
-      headers: { 'x-fenebris-secret': $env.DASHBOARD_WEBHOOK_SECRET, 'content-type': 'application/json' },
-      body: { event: 'launch_progress', ingest: false, data: { runId: ctx.runId, stage: 'failed', message: reason } } });
-  } catch (err) { /* the dashboard closes the run itself after 8 quiet minutes */ }
+if (!leads.length) {
+  if (failed) await reportRun(this.helpers, ctx.runId, 'failed', apiFailReason('Apify', failed.error));
+  else await reportRun(this.helpers, ctx.runId, 'stopped', 'Apify found no new people for these filters (people found before are skipped). Try wider places, industries or roles.');
   return [];
 }
 // Apify is asked for a small margin over the target; "Drop Existing Leads" cuts to the target.

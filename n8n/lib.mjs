@@ -271,6 +271,27 @@ export function sticky(w, content, pos, size = [520, 260], color = 5) {
   return w.add(`Note ${w.nodes.length + 1}`, "n8n-nodes-base.stickyNote", 1, pos, { content, width: size[0], height: size[1], color });
 }
 
+/**
+ * Code-node helpers for the Launch progress card. `reportRun(helpers, runId, 'failed'|'stopped', message)` ends the run
+ * with a reason; `apiFailReason(service, error)` turns an HTTP error item into plain words (bad key, no credit, other).
+ */
+export const REPORT_JS = String.raw`
+async function reportRun(helpers, runId, stage, message) {
+  if (!runId) return;
+  try {
+    await helpers.httpRequest({ method: 'POST', url: $env.DASHBOARD_URL + '/api/webhooks/n8n', json: true, timeout: 15000,
+      headers: { 'x-fenebris-secret': $env.DASHBOARD_WEBHOOK_SECRET, 'content-type': 'application/json' },
+      body: { event: 'launch_progress', ingest: false, data: { runId, stage, message } } });
+  } catch (e) { /* the dashboard closes a quiet run itself after 8 minutes */ }
+}
+function apiFailReason(service, e) {
+  const text = [typeof e === 'string' ? e : ((e && e.message) || ''), (e && e.description) || ''].join(' ').trim();
+  if (/authoriz|authentic|token|api.?key|401|user.*not found|invalid key|unauthor/i.test(text)) return service + ' refused our login: its API key is no longer valid (regenerated, deleted or account changed). Put the new key in Settings > Integrations and launch again.';
+  if (/credit|payment|usage|insufficient|quota|402|403|429/i.test(text)) return service + ' refused the request: the account is out of credit, over its plan limit or rate-limited.';
+  return service + ' did not answer properly: ' + text.slice(0, 180);
+}
+`;
+
 export const DASH = {
   url: "={{ $env.DASHBOARD_URL }}/api/webhooks/n8n",
   headers: { "x-fenebris-secret": "={{ $env.DASHBOARD_WEBHOOK_SECRET }}", "content-type": "application/json" },

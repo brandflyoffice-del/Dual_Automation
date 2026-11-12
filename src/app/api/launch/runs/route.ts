@@ -7,7 +7,8 @@ export const dynamic = "force-dynamic";
 const QUIET_MS = 8 * 60_000;
 
 const QUIET_MESSAGE: Record<string, string> = {
-  searching: "The search returned no people for these filters. Try wider places, industries or roles.",
+  // Reached only when n8n sent nothing for 8 minutes (search failures and empty searches report themselves now).
+  searching: "The search step did not answer. A service may have rejected the request: check Settings > Integrations, then launch again.",
   filtering: "No new leads passed your filters (or all were already in your list).",
   checking: "No lead had a valid work email after checking.",
   writing: "The AI did not qualify any of these leads for this campaign.",
@@ -29,7 +30,8 @@ export async function GET() {
           : r.stage === "filtering" && r.found > 0 && r.matched === 0 // n8n reports "matched" whenever at least one lead matched
             ? `None of the ${r.found} people found matched your places, roles, sizes and industries. Try wider filters.`
             : (QUIET_MESSAGE[r.stage] ?? "Finished.");
-      run = await db.launchRun.update({ where: { id: r.id }, data: { status: "done", stage: "done", message, finishedAt: new Date() } });
+      // The stage stays where it stopped, so the card does not tick steps that never ran.
+      run = await db.launchRun.update({ where: { id: r.id }, data: { status: "done", message, finishedAt: new Date() } });
     }
     // Leads saved by this run (the lead lane writes them with the run's campaign and source as it goes).
     const added = await db.lead.count({
