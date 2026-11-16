@@ -83,7 +83,8 @@ TRUTHFULNESS RULES (non-negotiable):
 
 CAMPAIGN TARGETING (overrides parts of the ICP):
 - <campaign_targeting> holds the places, industries, roles and revenue range the user picked on purpose. When it names places or industries, those REPLACE the Geographies and Industries lines of the IDEAL CUSTOMER PROFILE: a prospect inside them is in ICP even outside US/UK/Europe/UAE or the five listed industries. The chosen roles replace the decision-maker list. If revenue is "any", never disqualify on revenue.
-- Still set fits_ticket_threshold=false for a clearly wrong kind of business, a person who is not a decision maker, or a company that looks closed.
+- The lead search already matched these roles and industries, in any language and including sub-industries (Insurance, Banking or Investment Management count under FinTech / Financial Services; a product brand or maker that sells online counts under E-commerce & Retail; a property, letting or freight firm counts under Real Estate & Logistics). Never disqualify only because the job title or the industry label is worded differently from the list. Founders, owners, partners, C-level, managing directors, any director, and heads of a function (marketing, growth, digital, e-commerce, sales, operations, IT) are decision makers for our services. Missing revenue is never a reason to disqualify.
+- Still set fits_ticket_threshold=false for a clearly wrong kind of business, a junior or unrelated person (intern, assistant, student, freelancer, investor in someone else's company), or a company that looks closed.
 
 CLASSIFY:
 - recommended_service: the service LINE name from <our_services> that offer_service belongs to.

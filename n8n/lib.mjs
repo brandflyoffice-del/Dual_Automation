@@ -300,6 +300,9 @@ export function keysNode(w, name, pos, trigger) {
  */
 export const MODEL_JS = String.raw`
 function tempFor(model, t) { return /^(gpt-4|gpt-3\.5|chatgpt-4o)/i.test(String(model || '')) ? { temperature: t } : {}; }
+// Reasoning models think before answering and that thinking is billed as output: 'low' cut gpt-6-luna from ~3,000 to
+// ~1,100 output tokens per lead with the same email quality (tested 2026-11-16). Older models do not take the setting.
+function effortFor(model, e) { return /^(gpt-5|gpt-6|o\d)/i.test(String(model || '')) ? { reasoning_effort: e } : {}; }
 `;
 
 /**

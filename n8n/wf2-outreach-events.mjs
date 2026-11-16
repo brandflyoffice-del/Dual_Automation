@@ -230,7 +230,7 @@ if ((lead.conversation || []).some(c => new Date(c.at).getTime() > evAt + 1000))
 const sent = (lead.sent_emails || []).filter(e => e.step <= ev.step).pop() || {};
 const user = '<our_last_email subject="' + (sent.subject || '') + '">\n' + (sent.body || '') + '\n</our_last_email>\n<prospect_reply>\n' + (ev.body || '(empty reply)') + '\n</prospect_reply>';
 const MODEL = ${keyExpr("OPENAI_MODEL")} || 'gpt-4o';
-return [{ json: { classifyRequest: { model: MODEL, ...tempFor(MODEL, 0), response_format: { type: 'json_object' },
+return [{ json: { classifyRequest: { model: MODEL, ...tempFor(MODEL, 0), ...effortFor(MODEL, 'low'), response_format: { type: 'json_object' },
   messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: user }] } } }];
 `,
   );

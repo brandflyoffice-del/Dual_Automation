@@ -637,7 +637,7 @@ return $('Site Audit Extract').all().map(it => {
     '<ticket_gate>' + ($env.TICKET_GATE === 'off' ? 'off' : 'on') + '</ticket_gate>\n' +
     '<campaign_targeting>' + JSON.stringify({ places: ctx.places || [], industries: (ctx.industriesSel || []).concat(ctx.customIndustries || []),
       roles: ctx.roles || [], revenue: ctx.anyRevenue ? 'any' : '100k-10M', offering: ctx.offering || null }) + '</campaign_targeting>';
-  return { json: { ...l, llmRequest: { model: MODEL, ...tempFor(MODEL, 0.4), response_format: { type: 'json_object' },
+  return { json: { ...l, llmRequest: { model: MODEL, ...tempFor(MODEL, 0.4), ...effortFor(MODEL, 'low'), response_format: { type: 'json_object' },
     messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: user }] } } };
 });
 `,
