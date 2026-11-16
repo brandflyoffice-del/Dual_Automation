@@ -19,6 +19,7 @@ export async function POST(req: Request) {
   const parsed = body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   const patch: Partial<Record<IntegrationKey, string | null>> = {};
+  const warnings: string[] = [];
   for (const [k, v] of Object.entries(parsed.data.values)) {
     if (!INTEGRATION_KEYS.includes(k as IntegrationKey)) continue;
     const key = k as IntegrationKey;
@@ -26,12 +27,13 @@ export async function POST(req: Request) {
     if (val && /\s/.test(val)) return NextResponse.json({ error: `${label(key)}: a key has no spaces. Copy it again.` }, { status: 400 });
     if (val && INTEGRATION_FIELDS.find((f) => f.key === key)?.testable) {
       const t = await testIntegration(key, val);
-      if (!t.ok) return NextResponse.json({ error: `${label(key)} not saved: ${t.detail}.` }, { status: 400 });
+      if (!t.ok && !t.keyValid) return NextResponse.json({ error: `${label(key)} not saved: ${t.detail}.` }, { status: 400 });
+      if (!t.ok) warnings.push(`${label(key)}: ${t.detail}`);
     }
     patch[key] = val || null;
   }
   await saveIntegrations(patch);
-  return NextResponse.json({ ok: true, integrations: await integrationStatus() });
+  return NextResponse.json({ ok: true, warnings, integrations: await integrationStatus() });
 }
 
 const label = (k: IntegrationKey) => INTEGRATION_FIELDS.find((f) => f.key === k)?.label ?? k;

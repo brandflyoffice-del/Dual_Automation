@@ -89,7 +89,8 @@ export async function saveIntegrations(patch: Partial<Record<IntegrationKey, str
   cache = { at: Date.now(), stored: s };
 }
 
-type TestResult = { ok: boolean; detail: string };
+/** keyValid: the key itself works but the account has a problem (e.g. no credit), so it may still be saved. */
+type TestResult = { ok: boolean; detail: string; keyValid?: boolean };
 
 async function call(url: string, init?: RequestInit): Promise<{ status: number; body: unknown }> {
   const r = await fetch(url, { ...init, signal: AbortSignal.timeout(15_000), cache: "no-store" });
@@ -111,8 +112,20 @@ export async function testIntegration(key: IntegrationKey, value?: string): Prom
       return r.status === 200 && Array.isArray(r.body) ? { ok: true, detail: `Connected: ${r.body.length} campaigns` } : { ok: false, detail: "Smartlead rejected this key" };
     }
     if (key === "OPENAI_API_KEY") {
-      const r = await call("https://api.openai.com/v1/models", { headers: { Authorization: `Bearer ${v}` } });
-      return r.status === 200 ? { ok: true, detail: "Connected" } : { ok: false, detail: r.status === 429 ? "OpenAI says the account is out of credit or rate-limited" : "OpenAI rejected this key" };
+      // A 1-token request (a tiny fraction of a cent): /v1/models answers 200 even when the account has no credit left.
+      const model = (await integrationValue("OPENAI_MODEL")) || "gpt-4o";
+      const r = await call("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${v}`, "content-type": "application/json" },
+        body: JSON.stringify({ model, max_tokens: 1, messages: [{ role: "user", content: "ok" }] }),
+      });
+      const e = (r.body as { error?: { type?: string; code?: string; message?: string } } | null)?.error;
+      const t = [e?.type, e?.code, e?.message].join(" ");
+      if (r.status === 200) return { ok: true, detail: `Connected, credit available (${model})` };
+      if (/insufficient_quota|credit|billing/i.test(t)) return { ok: false, keyValid: true, detail: "Key is valid but the OpenAI account has no credit left: add credits at platform.openai.com > Settings > Billing" };
+      if (r.status === 429) return { ok: false, keyValid: true, detail: "OpenAI is rate-limiting this key right now; try again in a minute" };
+      if (r.status === 404 || /model/i.test(String(e?.code))) return { ok: false, detail: `OpenAI does not offer the model "${model}" to this key` };
+      return { ok: false, detail: "OpenAI rejected this key" };
     }
     if (key === "CAL_API_KEY") {
       const r = await call("https://api.cal.com/v2/me", { headers: { Authorization: `Bearer ${v}`, "cal-api-version": "2024-08-13" } });

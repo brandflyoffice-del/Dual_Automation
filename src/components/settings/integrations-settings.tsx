@@ -81,12 +81,13 @@ function IntegrationRow({
     setBusy(next === null ? "clear" : "save");
     setCheck(null);
     const r = await fetch("/api/settings/integrations", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ values: { [f.key]: next } }) }).catch(() => null);
-    const j = (await r?.json().catch(() => null)) as { integrations?: IntegrationStatus[]; error?: string } | null;
+    const j = (await r?.json().catch(() => null)) as { integrations?: IntegrationStatus[]; warnings?: string[]; error?: string } | null;
     setBusy(null);
     if (r?.ok && j?.integrations) {
       onSaved(j.integrations);
       setValue("");
-      toast.success(next === null ? `${f.label} removed` : `${f.label} saved`, { description: next === null ? "The key set on the server is used again." : "Used from the next launch or reply." });
+      if (j.warnings?.length) toast.warning(`${f.label} saved, but needs attention`, { description: j.warnings.join(" "), duration: 15000 });
+      else toast.success(next === null ? `${f.label} removed` : `${f.label} saved`, { description: next === null ? "The key set on the server is used again." : "Used from the next launch or reply." });
     } else toast.error("Not saved", { description: j?.error || "Try again" });
   }
 

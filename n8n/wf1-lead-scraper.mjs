@@ -652,7 +652,7 @@ return $('Site Audit Extract').all().map(it => {
     w,
     "Parse AI + Qualification Gate",
     [17, 0],
-    EMAIL_RULES_JS + String.raw`
+    EMAIL_RULES_JS + REPORT_JS + String.raw`
 const src = $('Build LLM Request').all();
 const ctx = $('Build ICP Query').first().json.ctx;
 const booking = $env.BOOKING_LINK;
@@ -675,6 +675,24 @@ async function fixSequence(req, original, problems) {
   return JSON.parse(r.choices[0].message.content);
 }
 const llmItems = $input.all();
+// When OpenAI itself refused every request (no credit, bad key, rate limit), the progress card says so instead of
+// "the AI did not qualify any lead". The error items only say "status code 429", so one tiny call reads OpenAI's reason.
+const aiErrors = llmItems.filter(it => it.json && it.json.error && !it.json.choices);
+if (llmItems.length && aiErrors.length === llmItems.length) {
+  let reason = apiFailReason('OpenAI', aiErrors[0].json.error);
+  try {
+    const p = await helpers.httpRequest({ method: 'POST', url: 'https://api.openai.com/v1/chat/completions', json: true, timeout: 20000, ignoreHttpStatusErrors: true, returnFullResponse: true,
+      headers: { Authorization: 'Bearer ' + ${keyExpr("OPENAI_API_KEY")}, 'content-type': 'application/json' },
+      body: { model: ${keyExpr("OPENAI_MODEL")} || 'gpt-4o', max_tokens: 1, messages: [{ role: 'user', content: 'ok' }] } });
+    const e = (p && p.body && p.body.error) || {};
+    const t = [e.type, e.code, e.message].join(' ');
+    if (/insufficient_quota|credit|billing/i.test(t)) reason = 'OpenAI is out of credit, so no emails could be written. Add credits at platform.openai.com > Settings > Billing (the AI replies use the same account), then launch again.';
+    else if (p && p.statusCode === 401) reason = apiFailReason('OpenAI', '401 ' + t);
+    else if (p && p.statusCode === 429) reason = 'OpenAI is busy (too many requests right now). Launch again in a few minutes.';
+  } catch (e) { /* keep the general reason */ }
+  await reportRun(helpers, ctx.runId, 'failed', reason);
+  return [];
+}
 for (let i = 0; i < llmItems.length; i++) await (async (it, i) => {
   const lead = src[i].json;
   let ai;
