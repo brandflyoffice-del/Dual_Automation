@@ -61,6 +61,30 @@ async function main() {
     return;
   }
 
+  // A deploy restarts n8n, which kills a Launch in progress (2026-11-16: a client launch lost 31 AI-written leads).
+  // Wait for running launches to finish (max 20 minutes); --force skips the wait.
+  if (!flag("--force")) {
+    const running = () =>
+      new Promise((resolve) => {
+        const p = spawn("ssh", [...sshArgs, `docker exec fenebris-db-1 psql -U fenebris -d fenebris -tA -c "select count(*) from launch_runs where status='running' and updated_at > now() - interval '10 minutes'"`], {
+          stdio: ["ignore", "pipe", "ignore"],
+        });
+        let out = "";
+        p.stdout.on("data", (d) => (out += d));
+        p.on("close", () => resolve(parseInt(out.trim(), 10) || 0));
+      });
+    for (let i = 0; i < 60; i++) {
+      const n = await running();
+      if (!n) break;
+      if (i === 0) console.log(`⏳ ${n} launch(es) running on the server; waiting for them to finish before restarting n8n (--force to skip)`);
+      if (i === 59) {
+        console.error("✖ a launch is still running after 20 minutes; deploy stopped. Re-run later or use --force.");
+        process.exit(1);
+      }
+      await new Promise((r) => setTimeout(r, 20_000));
+    }
+  }
+
   const dirty = spawnSync("git", ["status", "--porcelain"], { cwd: root, encoding: "utf8" }).stdout.trim();
   const sha = spawnSync("git", ["rev-parse", "--short", "HEAD"], { cwd: root, encoding: "utf8" }).stdout.trim();
   if (dirty) console.warn("⚠ uncommitted changes are NOT deployed (only committed code is).");

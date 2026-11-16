@@ -29,6 +29,7 @@ const schema = z
     placeCountries: z.array(z.string().regex(/^[a-z]{2}$/)).max(60).optional(),
     placeCities: z.array(z.string().trim().min(2).max(64)).max(10).optional(),
     anyRevenue: z.boolean().optional(),
+    revenueBand: z.enum(["small", "icp", "any"]).optional(),
     industryQuery: z.string().trim().max(80).optional(),
     offering: z.string().trim().max(80).optional(),
     extraTitles: z.string().trim().max(120).optional(),
@@ -55,7 +56,11 @@ export async function POST(req: Request) {
 
   const payload = {
     ...parsed.data,
-    icp: { revenueMin: ICP.revenueMin, revenueMax: parsed.data.anyRevenue ? null : ICP.revenueMax, minTicket: ICP.minTicket },
+    icp: {
+      revenueMin: parsed.data.revenueBand === "small" || parsed.data.revenueBand === "any" || parsed.data.anyRevenue ? null : ICP.revenueMin,
+      revenueMax: parsed.data.revenueBand === "small" ? ICP.revenueMin : parsed.data.revenueBand === "any" || parsed.data.anyRevenue ? null : ICP.revenueMax,
+      minTicket: ICP.minTicket,
+    },
     triggeredAt: new Date().toISOString(),
     source: "dashboard",
   };

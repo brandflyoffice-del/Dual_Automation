@@ -190,7 +190,9 @@ return [{ json: { aiArkSearch, apifyInput, ctx: {
   offering: String(body.offering || '').slice(0, 80),
   places: placeList,
   customIndustries,
-  anyRevenue: body.anyRevenue === true,
+  anyRevenue: body.anyRevenue === true || body.revenueBand === 'any',
+  // small = under $100k a year, icp = $100k-$10M, any = no revenue rule
+  revenueBand: ['small', 'icp', 'any'].includes(body.revenueBand) ? body.revenueBand : (body.anyRevenue === true ? 'any' : 'icp'),
   campaignId: ['4238486','4238487','4238488','4238489','4238491'].includes(String(body.campaignId || '')) ? String(body.campaignId) : '4238486',
   runId: typeof body.runId === 'string' && /^[0-9a-f-]{36}$/i.test(body.runId) ? body.runId : null, // dashboard progress card
 } } }];
@@ -345,7 +347,8 @@ const pushLead = (lead) => {
   const employees = Number(lead.employeeCount || 0);
   if (employees && (employees < ctx.sizeMin || employees > ctx.sizeMax)) return;
   const annual = Number(lead.annualRevenue || 0);
-  if (annual && !ctx.anyRevenue && (annual < 100000 || annual > 10000000)) return;
+  const band = ctx.revenueBand || (ctx.anyRevenue ? 'any' : 'icp');
+  if (annual && band !== 'any' && (band === 'small' ? annual >= 100000 : (annual < 100000 || annual > 10000000))) return;
   const hay = lead.hay || '';
   const custom = customRx.find(c => c.rx.test(hay));
   // Only custom industries chosen: the people search already filtered by them, so a lead with no industry text is kept.
@@ -636,7 +639,7 @@ return $('Site Audit Extract').all().map(it => {
     '<preferred_service_tiebreaker>' + (ctx.service || 'none') + '</preferred_service_tiebreaker>\n' +
     '<ticket_gate>' + ($env.TICKET_GATE === 'off' ? 'off' : 'on') + '</ticket_gate>\n' +
     '<campaign_targeting>' + JSON.stringify({ places: ctx.places || [], industries: (ctx.industriesSel || []).concat(ctx.customIndustries || []),
-      roles: ctx.roles || [], revenue: ctx.anyRevenue ? 'any' : '100k-10M', offering: ctx.offering || null }) + '</campaign_targeting>';
+      roles: ctx.roles || [], revenue: ctx.revenueBand === 'small' ? 'under 100k' : (ctx.anyRevenue || ctx.revenueBand === 'any') ? 'any' : '100k-10M', offering: ctx.offering || null }) + '</campaign_targeting>';
   return { json: { ...l, llmRequest: { model: MODEL, ...tempFor(MODEL, 0.4), ...effortFor(MODEL, 'low'), response_format: { type: 'json_object' },
     messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: user }] } } };
 });

@@ -151,6 +151,8 @@ type LaunchDefaults = {
   roles: string[];
   employees: string[];
   anyRevenue: boolean;
+  /** "small" = under $100k, "icp" = $100k–$10M, "any" (older saved defaults only have anyRevenue) */
+  revenue?: "small" | "icp" | "any";
   emailType: "work" | "any";
   maxPerCompany: number;
   limit: number;
@@ -187,7 +189,8 @@ export function LaunchCampaign({ className, compact = false }: { className?: str
   const [extraTitles, setExtraTitles] = useState("");
   const [excludeNote, setExcludeNote] = useState("");
   const [employees, setEmployees] = useState<string[]>(DEFAULT_EMPLOYEE_RANGES);
-  const [anyRevenue, setAnyRevenue] = useState(false);
+  const [revenue, setRevenue] = useState<"small" | "icp" | "any">("icp");
+  const anyRevenue = revenue === "any";
   const [emailType, setEmailType] = useState<"work" | "any">("work");
   const [maxPerCompany, setMaxPerCompany] = useState(2);
   const [limit, setLimit] = useState(40);
@@ -309,7 +312,7 @@ export function LaunchCampaign({ className, compact = false }: { className?: str
       changes.push(`Company size: ${f.employees.map((e) => EMPLOYEE_RANGES.find((x) => x.id === e)?.label).join(", ")}`);
     }
     if (f.anyRevenue) {
-      setAnyRevenue(true);
+      setRevenue("any");
       changes.push("Any revenue");
     }
     if (f.emailType) {
@@ -372,14 +375,14 @@ export function LaunchCampaign({ className, compact = false }: { className?: str
     setRoles(arr(d.roles, PRESET_ROLES));
     setRolesTouched(Array.isArray(d.roles) && d.roles.length > 0);
     setEmployees(arr(d.employees, DEFAULT_EMPLOYEE_RANGES));
-    setAnyRevenue(d.anyRevenue === true);
+    setRevenue(d.revenue === "small" || d.revenue === "any" || d.revenue === "icp" ? d.revenue : d.anyRevenue === true ? "any" : "icp");
     setEmailType(d.emailType === "any" ? "any" : "work");
     setMaxPerCompany(Number.isFinite(d.maxPerCompany) && d.maxPerCompany! >= 1 ? d.maxPerCompany! : 2);
     setLimit(Number.isFinite(d.limit) && d.limit! >= 1 ? d.limit! : 40);
   }
 
   function saveDefaults() {
-    const d: LaunchDefaults = { lineId, places, core, custom, roles, employees, anyRevenue, emailType, maxPerCompany, limit };
+    const d: LaunchDefaults = { lineId, places, core, custom, roles, employees, anyRevenue, revenue, emailType, maxPerCompany, limit };
     try {
       window.localStorage.setItem(DEFAULTS_KEY, JSON.stringify(d));
       toast.success("Saved as your default", { description: "Launch opens with these filters next time. Reset brings them back." });
@@ -420,10 +423,10 @@ export function LaunchCampaign({ className, compact = false }: { className?: str
       { label: "Where", value: more(where, 3) || "—" },
       { label: "Industries", value: more(inds, 2) || "—" },
       { label: "Roles", value: `${roles.length} decision-maker ${roles.length === 1 ? "role" : "roles"}${extraTitles.trim() ? " + extra titles" : ""}` },
-      { label: "Company size", value: sizes.length ? `${lo.toLocaleString()}–${hi.toLocaleString()} people · ${anyRevenue ? "any revenue" : "$100k–$10M"}` : "—" },
+      { label: "Company size", value: sizes.length ? `${lo.toLocaleString()}–${hi.toLocaleString()} people · ${revenue === "any" ? "any revenue" : revenue === "small" ? "under $100k revenue" : "$100k–$10M"}` : "—" },
       { label: "Leads", value: `Up to ${limit} · max ${maxPerCompany}/company · ${emailType === "work" ? "work email" : "work or personal"}` },
     ];
-  }, [places, core, custom, employees, anyRevenue, sub, line, campaignId, roles, extraTitles, limit, maxPerCompany, emailType]);
+  }, [places, core, custom, employees, revenue, sub, line, campaignId, roles, extraTitles, limit, maxPerCompany, emailType]);
 
   async function run() {
     if (!ready || busy) return;
@@ -455,6 +458,7 @@ export function LaunchCampaign({ className, compact = false }: { className?: str
           roles,
           employees,
           anyRevenue,
+          revenueBand: revenue,
           extraTitles: extraTitles.trim(),
           excludeNote: excludeNote.trim(),
           service: line ? LINE_SERVICE[line.id] ?? null : null,
@@ -744,12 +748,13 @@ export function LaunchCampaign({ className, compact = false }: { className?: str
                 </Field>
                 <Field label="Yearly revenue">
                   <Segmented
-                    value={anyRevenue ? "any" : "icp"}
+                    value={revenue}
                     options={[
+                      { value: "small", label: "Under $100k" },
                       { value: "icp", label: "$100k–$10M" },
                       { value: "any", label: "Any" },
                     ]}
-                    onChange={(v) => setAnyRevenue(v === "any")}
+                    onChange={(v) => setRevenue(v === "small" || v === "any" ? v : "icp")}
                   />
                 </Field>
               </div>
