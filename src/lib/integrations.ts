@@ -112,12 +112,12 @@ export async function testIntegration(key: IntegrationKey, value?: string): Prom
       return r.status === 200 && Array.isArray(r.body) ? { ok: true, detail: `Connected: ${r.body.length} campaigns` } : { ok: false, detail: "Smartlead rejected this key" };
     }
     if (key === "OPENAI_API_KEY") {
-      // A 1-token request (a tiny fraction of a cent): /v1/models answers 200 even when the account has no credit left.
+      // A tiny request (a fraction of a cent): /v1/models answers 200 even when the account has no credit left.
       const model = (await integrationValue("OPENAI_MODEL")) || "gpt-4o";
       const r = await call("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: { Authorization: `Bearer ${v}`, "content-type": "application/json" },
-        body: JSON.stringify({ model, max_tokens: 1, messages: [{ role: "user", content: "ok" }] }),
+        body: JSON.stringify({ model, max_completion_tokens: 16, messages: [{ role: "user", content: "ok" }] }),
       });
       const e = (r.body as { error?: { type?: string; code?: string; message?: string } } | null)?.error;
       const t = [e?.type, e?.code, e?.message].join(" ");

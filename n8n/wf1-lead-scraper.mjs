@@ -1,4 +1,4 @@
-import { Workflow, webhook, respond, ifNode, http, code, postgres, noop, sticky, dashboardNotify, smartleadUrl, PG_CRED_ID, PG_CRED_NAME, REPORT_JS, keysNode, keyExpr } from "./lib.mjs";
+import { Workflow, webhook, respond, ifNode, http, code, postgres, noop, sticky, dashboardNotify, smartleadUrl, PG_CRED_ID, PG_CRED_NAME, REPORT_JS, MODEL_JS, keysNode, keyExpr } from "./lib.mjs";
 import { QUALIFY_AND_SEQUENCE_SYSTEM, EMAIL_RULES_JS } from "./prompts.mjs";
 import { DEFAULT_SERVICE_LINES, DEFAULT_DELIVER, BRAND_FACTS } from "./services.mjs";
 import { COUNTRIES, EMPLOYEE_BUCKETS, EUROPE_CORE, ROLE_CATALOG, TZ_FROM_LOCATION_JS } from "./targeting.mjs";
@@ -606,10 +606,11 @@ return out;
     w,
     "Build LLM Request",
     [15, 0],
-    "const SYSTEM = " + JSON.stringify(QUALIFY_AND_SEQUENCE_SYSTEM) + ";\nconst DEFAULT_LINES = " + JSON.stringify(DEFAULT_SERVICE_LINES) +
+    MODEL_JS + "const SYSTEM = " + JSON.stringify(QUALIFY_AND_SEQUENCE_SYSTEM) + ";\nconst DEFAULT_LINES = " + JSON.stringify(DEFAULT_SERVICE_LINES) +
       ";\nconst DEFAULT_DELIVER = " + JSON.stringify(DEFAULT_DELIVER) + ";\nconst BRAND_FACTS = " + JSON.stringify(BRAND_FACTS) + ";\n" + String.raw`
 const ctx = $('Build ICP Query').first().json.ctx;
 const booking = $env.BOOKING_LINK;
+const MODEL = ${keyExpr("OPENAI_MODEL")} || 'gpt-4o';
 const sender = $env.SENDER_NAME || 'Aarav Mehta';
 if (!booking) throw new Error('BOOKING_LINK env var is required');
 const stored = (($('DB: Service Catalogue').first() || {}).json || {}).lines;
@@ -636,7 +637,7 @@ return $('Site Audit Extract').all().map(it => {
     '<ticket_gate>' + ($env.TICKET_GATE === 'off' ? 'off' : 'on') + '</ticket_gate>\n' +
     '<campaign_targeting>' + JSON.stringify({ places: ctx.places || [], industries: (ctx.industriesSel || []).concat(ctx.customIndustries || []),
       roles: ctx.roles || [], revenue: ctx.anyRevenue ? 'any' : '100k-10M', offering: ctx.offering || null }) + '</campaign_targeting>';
-  return { json: { ...l, llmRequest: { model: ${keyExpr("OPENAI_MODEL")} || 'gpt-4o', temperature: 0.4, response_format: { type: 'json_object' },
+  return { json: { ...l, llmRequest: { model: MODEL, ...tempFor(MODEL, 0.4), response_format: { type: 'json_object' },
     messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: user }] } } };
 });
 `,
@@ -652,7 +653,7 @@ return $('Site Audit Extract').all().map(it => {
     w,
     "Parse AI + Qualification Gate",
     [17, 0],
-    EMAIL_RULES_JS + REPORT_JS + String.raw`
+    EMAIL_RULES_JS + REPORT_JS + MODEL_JS + String.raw`
 const src = $('Build LLM Request').all();
 const ctx = $('Build ICP Query').first().json.ctx;
 const booking = $env.BOOKING_LINK;
@@ -670,7 +671,7 @@ const helpers = this.helpers;
 async function fixSequence(req, original, problems) {
   const r = await helpers.httpRequest({ method: 'POST', url: 'https://api.openai.com/v1/chat/completions', json: true, timeout: 90000,
     headers: { Authorization: 'Bearer ' + ${keyExpr("OPENAI_API_KEY")}, 'content-type': 'application/json' },
-    body: { ...req, temperature: 0.3, messages: [...req.messages, { role: 'assistant', content: original },
+    body: { ...req, ...tempFor(req.model, 0.3), messages: [...req.messages, { role: 'assistant', content: original },
       { role: 'user', content: 'Your JSON breaks these rules:\n- ' + problems.join('\n- ') + '\nFix every one and return the complete JSON again (same keys). Keep the facts; change only the wording.' }] } });
   return JSON.parse(r.choices[0].message.content);
 }
@@ -683,7 +684,7 @@ if (llmItems.length && aiErrors.length === llmItems.length) {
   try {
     const p = await helpers.httpRequest({ method: 'POST', url: 'https://api.openai.com/v1/chat/completions', json: true, timeout: 20000, ignoreHttpStatusErrors: true, returnFullResponse: true,
       headers: { Authorization: 'Bearer ' + ${keyExpr("OPENAI_API_KEY")}, 'content-type': 'application/json' },
-      body: { model: ${keyExpr("OPENAI_MODEL")} || 'gpt-4o', max_tokens: 1, messages: [{ role: 'user', content: 'ok' }] } });
+      body: { model: ${keyExpr("OPENAI_MODEL")} || 'gpt-4o', max_completion_tokens: 16, messages: [{ role: 'user', content: 'ok' }] } });
     const e = (p && p.body && p.body.error) || {};
     const t = [e.type, e.code, e.message].join(' ');
     if (/insufficient_quota|credit|billing/i.test(t)) reason = 'OpenAI is out of credit, so no emails could be written. Add credits at platform.openai.com > Settings > Billing (the AI replies use the same account), then launch again.';

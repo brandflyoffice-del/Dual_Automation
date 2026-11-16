@@ -150,7 +150,8 @@ CATALOG: ${JSON.stringify(catalog)}`;
       headers: { Authorization: `Bearer ${ai.key}`, "content-type": "application/json" },
       body: JSON.stringify({
         model: ai.model,
-        temperature: 0,
+        // newer reasoning models (gpt-5.x, gpt-6.x) accept only their default temperature
+        ...(/^(gpt-4|gpt-3\.5|chatgpt-4o)/i.test(ai.model) ? { temperature: 0 } : {}),
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: system },

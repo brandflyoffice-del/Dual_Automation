@@ -294,6 +294,15 @@ export function keysNode(w, name, pos, trigger) {
 }
 
 /**
+ * OpenAI model compatibility for Code nodes: newer reasoning models (gpt-5.x, gpt-6.x, o-series) accept only their
+ * default temperature, so a temperature is sent to the older GPT-4 / GPT-3.5 models only. The model is OPENAI_MODEL
+ * (Settings > Integrations).
+ */
+export const MODEL_JS = String.raw`
+function tempFor(model, t) { return /^(gpt-4|gpt-3\.5|chatgpt-4o)/i.test(String(model || '')) ? { temperature: t } : {}; }
+`;
+
+/**
  * Code-node helpers for the Launch progress card. `reportRun(helpers, runId, 'failed'|'stopped', message)` ends the run
  * with a reason; `apiFailReason(service, error)` turns an HTTP error item into plain words (bad key, no credit, other).
  */

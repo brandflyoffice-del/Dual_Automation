@@ -1,4 +1,4 @@
-import { Workflow, webhook, respond, respondHtml, ifNode, switchNode, http, code, postgres, sticky, dashboardNotify, smartleadUrl, googleCalendarIdNode, calExpr, DASH, PG_CRED_ID, PG_CRED_NAME , keysNode, keyExpr } from "./lib.mjs";
+import { Workflow, webhook, respond, respondHtml, ifNode, switchNode, http, code, postgres, sticky, dashboardNotify, smartleadUrl, googleCalendarIdNode, calExpr, DASH, PG_CRED_ID, PG_CRED_NAME , MODEL_JS, keysNode, keyExpr } from "./lib.mjs";
 import { CLASSIFY_REPLY_SYSTEM, DRAFT_REPLY_TEMPLATE, PRICE_TOKEN, STARTING_PRICE } from "./prompts.mjs";
 import { SIGN_JS, FMT_JS, PAGE_JS } from "./helpers.mjs";
 import { COUNTRIES } from "./targeting.mjs";
@@ -219,7 +219,7 @@ return [{ json: { type, event: {
     w,
     "Build Classify Request",
     [5, -1],
-    "const SYSTEM = " + JSON.stringify(CLASSIFY_REPLY_SYSTEM) + ";\n" + String.raw`
+    MODEL_JS + "const SYSTEM = " + JSON.stringify(CLASSIFY_REPLY_SYSTEM) + ";\n" + String.raw`
 const lead = $input.first().json;
 const ev = $('Normalize Event').first().json.event;
 if (Number(lead.seen_reply || 0) > 0) return []; // duplicate delivery of a reply we already handled
@@ -229,7 +229,8 @@ const evAt = new Date(ev.occurredAt || 0).getTime();
 if ((lead.conversation || []).some(c => new Date(c.at).getTime() > evAt + 1000)) return [];
 const sent = (lead.sent_emails || []).filter(e => e.step <= ev.step).pop() || {};
 const user = '<our_last_email subject="' + (sent.subject || '') + '">\n' + (sent.body || '') + '\n</our_last_email>\n<prospect_reply>\n' + (ev.body || '(empty reply)') + '\n</prospect_reply>';
-return [{ json: { classifyRequest: { model: ${keyExpr("OPENAI_MODEL")} || 'gpt-4o', temperature: 0, response_format: { type: 'json_object' },
+const MODEL = ${keyExpr("OPENAI_MODEL")} || 'gpt-4o';
+return [{ json: { classifyRequest: { model: MODEL, ...tempFor(MODEL, 0), response_format: { type: 'json_object' },
   messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: user }] } } }];
 `,
   );
@@ -398,7 +399,7 @@ return [{ json: { ctx: { ...ctx, tz }, qs: { start: iso(now), end: iso(now + 9 *
     w,
     "Build Reply Request",
     [14, -1],
-    "const DEFAULT_TEMPLATE = " + JSON.stringify(DRAFT_REPLY_TEMPLATE) + ";\nconst DEFAULT_PRICE = " + JSON.stringify(STARTING_PRICE) + ";\nconst PRICE_TOKEN = " + JSON.stringify(PRICE_TOKEN) + ";\n" + SIGN_JS + FMT_JS + String.raw`
+    MODEL_JS + "const DEFAULT_TEMPLATE = " + JSON.stringify(DRAFT_REPLY_TEMPLATE) + ";\nconst DEFAULT_PRICE = " + JSON.stringify(STARTING_PRICE) + ";\nconst PRICE_TOKEN = " + JSON.stringify(PRICE_TOKEN) + ";\n" + SIGN_JS + FMT_JS + String.raw`
 const ctx = $('Build Slots Request').first().json.ctx;
 const rs = ((($('DB: Reply Prompt Settings').first() || {}).json || {}).reply) || {};
 const customPrice = typeof rs.startingPrice === 'string' && /^\$\d{1,3}(,?\d{3})*(\.\d{2})?$/.test(rs.startingPrice.trim());
@@ -479,7 +480,7 @@ const user =
   '<time_buttons>' + (offered.length ? offered.map(s => s.label).join(' ; ') : 'none, only the booking link') + '</time_buttons>\n' +
   '<booking_link>' + booking + '</booking_link>\n<case_studies>' + (($env.CASE_STUDIES) || '') + '</case_studies>\n' +
   '<brand>' + JSON.stringify(brand) + '</brand>\n<lead_stage>' + (ctx.lead.stage || '') + '</lead_stage>';
-return [{ json: { ctx: { ...ctx, approvedPrice: PRICE, promptSource: customPrompt ? 'dashboard' : 'built-in', brand, signOff, offered, openIsos: openList.map(s => s.iso), openLabels: Object.fromEntries(openList.map(s => [s.iso, s.label])), publicBase, busyCount: busy.length }, draftRequest: { model: ${keyExpr("OPENAI_MODEL")} || 'gpt-4o', temperature: 0.3, response_format: { type: 'json_object' },
+return [{ json: { ctx: { ...ctx, approvedPrice: PRICE, promptSource: customPrompt ? 'dashboard' : 'built-in', brand, signOff, offered, openIsos: openList.map(s => s.iso), openLabels: Object.fromEntries(openList.map(s => [s.iso, s.label])), publicBase, busyCount: busy.length }, draftRequest: { model: ${keyExpr("OPENAI_MODEL")} || 'gpt-4o', ...tempFor(${keyExpr("OPENAI_MODEL")} || 'gpt-4o', 0.3), response_format: { type: 'json_object' },
   messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: user }] } } }];
 `,
   );
