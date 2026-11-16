@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import { useServiceHealth } from "@/components/service-alerts";
+import Link from "next/link";
 
 type Status = { n8n: "not_configured" | "unreachable" | "workflow_inactive" | "live"; detail: string; db: boolean; lastEventAt: string | null };
 
@@ -15,6 +17,10 @@ const COPY: Record<Status["n8n"], { label: string; dot: string; text: string }> 
 /** Sidebar health card: polls /api/system/status so the UI never claims automation is running when it is not. */
 export function SystemStatus() {
   const [s, setS] = useState<Status | null>(null);
+  // A paid service out of credit stops the automation too, even when n8n itself is up.
+  const { report } = useServiceHealth();
+  const down = (report?.services ?? []).filter((x) => x.level === "error");
+  const low = (report?.services ?? []).filter((x) => x.level === "warn");
 
   useEffect(() => {
     let stop = false;
@@ -35,6 +41,23 @@ export function SystemStatus() {
   }, []);
 
   const c = s ? COPY[s.n8n] : null;
+  if (s?.n8n === "live" && (down.length || low.length)) {
+    const bad = down.length > 0;
+    return (
+      <Link href="/settings?tab=integrations" className={cn("block rounded-lg border p-3 text-[11px] leading-relaxed", bad ? "border-rose-300 bg-rose-50 text-rose-900" : "border-amber-300 bg-amber-50 text-amber-900")}>
+        <div className="mb-1 flex items-center gap-1.5 text-xs font-medium">
+          <span className={cn("inline-flex size-2 rounded-full", bad ? "bg-rose-500" : "bg-amber-500")} />
+          {bad ? "Action needed" : "Running low"}
+        </div>
+        {(bad ? down : low).map((x) => (
+          <div key={x.service}>
+            {x.service}: {x.detail.split(":")[0]}
+          </div>
+        ))}
+        <div className="mt-1 underline">Open Credits & services</div>
+      </Link>
+    );
+  }
   return (
     <div className="rounded-lg border border-border bg-muted p-3 text-[11px] leading-relaxed text-muted-foreground">
       <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-foreground">

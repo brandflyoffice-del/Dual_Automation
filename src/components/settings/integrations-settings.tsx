@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { INTEGRATION_FIELDS, type IntegrationField, type IntegrationStatus } from "@/lib/integrations-shared";
 import { cn } from "@/lib/utils";
+import { CreditsPanel } from "@/components/service-alerts";
 
 type Check = { ok: boolean; detail: string } | null;
 
@@ -27,6 +28,7 @@ export function IntegrationsSettings() {
 
   return (
     <div className="space-y-4">
+      <CreditsPanel />
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">

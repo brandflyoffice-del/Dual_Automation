@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { callN8n, n8nWebhooks } from "@/lib/config";
 import { db } from "@/lib/db";
+import { launchBlocker } from "@/lib/service-health";
 import { EMPLOYEE_RANGES, EUROPE_COUNTRIES, ICP, ROLE_IDS, SERVICES } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +47,11 @@ const schema = z
 export async function POST(req: Request) {
   const parsed = schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid batch request", issues: parsed.error.issues }, { status: 400 });
+
+  // A launch with OpenAI out of credit (or Apify at its limit) would pay Apify for people the AI cannot write to,
+  // and those people are skipped in later launches. Stop it here with the reason instead.
+  const blocked = await launchBlocker(parsed.data.provider ?? "ai-ark");
+  if (blocked) return NextResponse.json({ error: blocked }, { status: 402 });
 
   const payload = {
     ...parsed.data,
