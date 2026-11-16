@@ -699,7 +699,11 @@ for (let i = 0; i < llmItems.length; i++) await (async (it, i) => {
   try { ai = JSON.parse(it.json.choices[0].message.content); } catch (e) { return; } // unparsable => skipped, never half-synced
   let problems = emailProblems(ai, lead.firstName);
   const firstProblems = problems.slice();
-  if (problems.length) {
+  // Only body problems (jargon, boilerplate, wrong offer, missing paragraphs) pay for a second AI call. Subject-only
+  // problems are fixed for free by the subject fallback below: GPT-4o broke the subject rules in 38 of 40 drafts, and
+  // rewriting all of them doubled the OpenAI cost per lead.
+  const aiRewrite = problems.some(x => !/subject/.test(x));
+  if (aiRewrite) {
     try {
       const fixed = await fixSequence(src[i].json.llmRequest, it.json.choices[0].message.content, problems);
       if (fixed && Array.isArray(fixed.emails) && fixed.emails.length === 4) { ai = fixed; problems = emailProblems(ai, lead.firstName); }
@@ -714,7 +718,8 @@ for (let i = 0; i < llmItems.length; i++) await (async (it, i) => {
     ai.emails.forEach((e, k) => {
       if (!e) return;
       const s = String(e.subject || '');
-      if (!s.trim() || BANNED_SUBJECT.test(s) || PUSHY.test(s) || seen.has(s.trim().toLowerCase())) e.subject = safe[k] || 'Note for ' + co;
+      const long = s.split(/\s+/).filter(Boolean).length > 7;
+      if (!s.trim() || long || BANNED_SUBJECT.test(s) || PUSHY.test(s) || seen.has(s.trim().toLowerCase())) e.subject = safe[k] || 'Note for ' + co;
       seen.add(String(e.subject).trim().toLowerCase());
     });
     problems = emailProblems(ai, lead.firstName);
@@ -748,7 +753,7 @@ for (let i = 0; i < llmItems.length; i++) await (async (it, i) => {
       industry: lead.industry, employeeCount: lead.employeeCount, annualRevenue: lead.annualRevenue, painPoint: ai.pain_point_tag, painPointDetail: ai.pain_point_detail,
       auditFindings: lead.auditFindings, recommendedService: serviceName, qualificationScore: Math.max(0, Math.min(100, Math.round(ai.qualification_score || 0))),
       estimatedTicket: ticket, dossier: { summary: ai.dossier_summary, business: ai.business_summary && ai.business_summary !== 'unknown' ? ai.business_summary : null, opportunity: ai.opportunity_reason || ai.pain_point_detail, discoveryQuestions: ai.discovery_questions, talkingPoints: ai.talking_points,
-        offer: ai.offer_service || null, offerLine: ai.offer_line || null, qualityIssues: problems.length ? problems : null, rewritten: firstProblems.length > 0 },
+        offer: ai.offer_service || null, offerLine: ai.offer_line || null, qualityIssues: problems.length ? problems : null, rewritten: aiRewrite, subjectsFixed: firstProblems.some(x => /subject/.test(x)) },
       campaignId: ctx.campaignId, leadSource: lead.leadSource || ctx.provider || 'ai-ark', sequences,
     },
   } });
