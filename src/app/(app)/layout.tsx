@@ -2,6 +2,7 @@ import { MobileNav, Sidebar } from "@/components/sidebar";
 import { getSetting } from "@/lib/settings";
 import { LaunchProgress } from "@/components/launch-progress";
 import { ServiceAlerts } from "@/components/service-alerts";
+import { VersionWatch } from "@/components/version-watch";
 
 // Every page reads the logo/name from the DB, so none may be prerendered at build time.
 export const dynamic = "force-dynamic";
@@ -25,6 +26,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </main>
       </div>
       <LaunchProgress />
+      <VersionWatch />
     </div>
   );
 }
