@@ -9,6 +9,8 @@ import { Input, Label, Textarea } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MultiPicker, type PickerOption } from "@/components/ui/multi-picker";
 import {
+  APIFY_MAX_TITLES,
+  apifyTitleList,
   DEFAULT_EMPLOYEE_RANGES,
   EMPLOYEE_RANGES,
   ICP,
@@ -224,10 +226,15 @@ export function LaunchCampaign({ className, compact = false }: { className?: str
 
   const bigCompanies = employees.some((e) => Number(e.split(",")[0]) > 200);
   const industryCount = core.length + custom.length;
+  // Apify searches at most 10 titles; more used to be dropped without a word.
+  const titleCount = (apifyTitleList(roles, extraTitles) as string[]).length;
+  const tooManyTitles = provider === "apify" && titleCount > APIFY_MAX_TITLES;
   const problems = [
     !places.length && "Pick at least one place.",
     !industryCount && "Pick at least one industry.",
     !roles.length && "Pick at least one role.",
+    tooManyTitles &&
+      `Apify searches up to ${APIFY_MAX_TITLES} job titles per launch; this one has ${titleCount}. Untick some roles or remove extra titles (a title a ticked role already covers is not counted).`,
     !employees.length && "Pick at least one company size.",
   ].filter(Boolean) as string[];
   const ready = problems.length === 0;
@@ -820,8 +827,14 @@ export function LaunchCampaign({ className, compact = false }: { className?: str
                 ))}
               </div>
               <Field label="Also include these titles" hint="Optional, comma-separated">
-                <Input value={extraTitles} maxLength={120} placeholder="e.g. Head of Sales, Store Manager" onChange={(e) => setExtraTitles(e.target.value)} />
+                <Input value={extraTitles} maxLength={400} placeholder="e.g. Head of Sales, Store Manager" onChange={(e) => setExtraTitles(e.target.value)} />
               </Field>
+              {provider === "apify" && (
+                <p className={tooManyTitles ? "text-[12px] font-medium text-rose-600" : "text-[12px] text-muted-foreground"}>
+                  {titleCount} of {APIFY_MAX_TITLES} job titles used (Apify searches up to {APIFY_MAX_TITLES} per launch; each ticked role is one, and its other spellings are included).
+                  {tooManyTitles && " Untick some roles or remove extra titles to launch."}
+                </p>
+              )}
             </Section>
 
             <Section step={5} icon={Building2} title="How many and how to reach them">

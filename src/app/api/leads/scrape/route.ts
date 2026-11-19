@@ -32,7 +32,7 @@ const schema = z
     revenueBand: z.enum(["small", "icp", "any"]).optional(),
     industryQuery: z.string().trim().max(80).optional(),
     offering: z.string().trim().max(80).optional(),
-    extraTitles: z.string().trim().max(120).optional(),
+    extraTitles: z.string().trim().max(400).optional(),
     excludeNote: z.string().trim().max(120).optional(),
     name: z.string().trim().max(80).optional(),
     emailType: z.enum(["work", "any"]).optional(),

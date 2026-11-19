@@ -152,8 +152,14 @@ if (keyword && keyword.length >= 3) apifyKeywords.push(keyword.slice(0, 64));
 // A custom industry with no LinkedIn industry name is searched as a headline keyword instead.
 if (customIndustries.length > apifyIndustryNames.length) customIndustries.filter(c => c.length >= 3 && !apifyIndustries.some(a => a.toLowerCase().includes(c.toLowerCase().slice(0, 5)))).forEach(c => apifyKeywords.push(c.slice(0, 64)));
 const maxPerCompany = Math.min(5, Math.max(1, parseInt(body.maxPerCompany || 2, 10)));
+// Same list as apifyTitleList() in targeting.mjs: extra titles a picked role already covers are not sent twice.
+const coveredTitles = new Set(roles.flatMap(r => ROLE_TITLES[r] || []).map(t => t.toLowerCase()));
+const seenTitles = new Set();
+const apifyTitles = roles.map(r => (ROLE_TITLES[r] || [])[0]).filter(Boolean)
+  .concat(String(body.extraTitles || '').split(/[,;\n]/).map(s => s.trim()).filter(t => t.length >= 3 && t.length <= 64 && !coveredTitles.has(t.toLowerCase())))
+  .filter(t => { const k = t.toLowerCase(); if (seenTitles.has(k)) return false; seenTitles.add(k); return true; });
 const apifyInput = {
-  jobTitles: [...new Set(roles.map(r => ROLE_TITLES[r][0]).concat(String(body.extraTitles || '').split(/[,;\n]/).map(s => s.trim()).filter(Boolean)))].filter(t => t.length >= 3 && t.length <= 64).slice(0, 10),
+  jobTitles: apifyTitles.slice(0, 10), // Apify allows 10; the Launch form refuses more
   titleMatch: 'word',
   emailType: body.emailType === 'any' ? 'any' : 'work',
   includePhones: true, // verified mobile when Apify has one (about 1 in 4 US leads); shown in the dashboard only, never emailed
@@ -185,7 +191,7 @@ return [{ json: { aiArkSearch, apifyInput, ctx: {
   region: regionsSel.join(','), industry: industriesSel.join(','), service: body.service || null, keyword, limit,
   source: 'dashboard', provider, regionsSel, industriesSel, roles, sizeMin, sizeMax, maxPerCompany,
   emailType: body.emailType === 'any' ? 'any' : 'work',
-  extraTitles: String(body.extraTitles || '').split(/[,;\n]/).map(s => s.trim()).filter(Boolean).slice(0, 8),
+  extraTitles: String(body.extraTitles || '').split(/[,;\n]/).map(s => s.trim()).filter(Boolean).slice(0, 20),
   name: String(body.name || '').slice(0, 80),
   offering: String(body.offering || '').slice(0, 80),
   places: placeList,

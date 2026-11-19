@@ -1,5 +1,6 @@
 // Single source of truth for Fenebris business rules (mirrored in the n8n AI prompts).
 import { EMPLOYEE_BUCKETS, ROLE_CATALOG } from "../../n8n/targeting.mjs";
+export { APIFY_MAX_TITLES, apifyTitleList } from "../../n8n/targeting.mjs";
 
 /** Launch-campaign source. Same filters either way; only the people search changes. */
 export const LEAD_PROVIDERS = [

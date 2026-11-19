@@ -25,6 +25,28 @@ export const ROLE_CATALOG = [
   { id: "Head of E-commerce", group: "Marketing & growth", titles: ["Head of Ecommerce", "Ecommerce Director", "Head of Digital", "Digital Director"], rx: "head of (e-?commerce|digital)|(e-?commerce|digital) director|director of (e-?commerce|digital)", preset: false },
 ];
 
+/** Apify searches at most this many job titles per run; more are refused, so the Launch form stops at it. */
+export const APIFY_MAX_TITLES = 10;
+
+/**
+ * The job titles one launch sends to Apify: the first title of each picked role, then the typed extra titles that
+ * no picked role already covers (case-insensitive, duplicates removed). n8n wf1 builds the same list.
+ */
+export function apifyTitleList(roleIds, extraText) {
+  const byId = Object.fromEntries(ROLE_CATALOG.map((r) => [r.id, r.titles]));
+  const covered = new Set(roleIds.flatMap((id) => byId[id] || []).map((t) => t.toLowerCase()));
+  const extras = String(extraText || "")
+    .split(/[,;\n]/)
+    .map((s) => s.trim())
+    .filter((t) => t.length >= 3 && t.length <= 64 && !covered.has(t.toLowerCase()));
+  const seen = new Set();
+  return roleIds
+    .map((id) => (byId[id] || [])[0])
+    .filter(Boolean)
+    .concat(extras)
+    .filter((t) => (seen.has(t.toLowerCase()) ? false : (seen.add(t.toLowerCase()), true)));
+}
+
 /** Company-size buckets (employees). The first five are the default. */
 export const EMPLOYEE_BUCKETS = [
   { id: "1,10", label: "1–10", preset: true },
