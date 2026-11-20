@@ -232,6 +232,7 @@ export function LaunchCampaign({ className, compact = false }: { className?: str
   const problems = [
     !places.length && "Pick at least one place.",
     !industryCount && "Pick at least one industry.",
+    custom.length > 20 && `Up to 20 typed industries per launch; this one has ${custom.length}. Remove some.`,
     !roles.length && "Pick at least one role.",
     tooManyTitles &&
       `Apify searches up to ${APIFY_MAX_TITLES} job titles per launch; this one has ${titleCount}. Untick some roles or remove extra titles (a title a ticked role already covers is not counted).`,

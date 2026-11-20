@@ -18,8 +18,8 @@ const schema = z
     industry: z.enum(["ALL", ...ICP.industries]).optional(),
     regions: z.array(z.enum(ICP.regions)).min(1).optional(),
     industries: z.array(z.enum(ICP.industries)).optional(),
-    industryTerms: z.array(z.string().trim().min(2).max(60)).max(8).optional(),
-    apifyIndustries: z.array(z.string().trim().min(3).max(64)).max(10).optional(),
+    industryTerms: z.array(z.string().trim().min(2).max(60)).max(20).optional(),
+    apifyIndustries: z.array(z.string().trim().min(3).max(64)).max(20).optional(),
     roles: z.array(z.enum(ROLE_IDS)).min(1).optional(),
     employees: z.array(z.enum(employeeIds)).min(1).optional(),
     europeCountries: z.array(z.enum(europeCodes)).min(1).optional(),
@@ -47,7 +47,11 @@ const schema = z
 /** Dashboard → the lead-engine lane of Fenebris_Outreach_Autopilot. ICP bounds are re-checked here and again in n8n. */
 export async function POST(req: Request) {
   const parsed = schema.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Invalid batch request", issues: parsed.error.issues }, { status: 400 });
+  if (!parsed.success) {
+    // Name the field, so the Launch toast says what to change instead of a bare "Invalid batch request".
+    const why = parsed.error.issues.slice(0, 3).map((i) => (i.path.length ? i.path.join(".") + ": " : "") + i.message).join("; ");
+    return NextResponse.json({ error: `Launch refused: ${why}`, issues: parsed.error.issues }, { status: 400 });
+  }
 
   // A launch with OpenAI out of credit (or Apify at its limit) would pay Apify for people the AI cannot write to,
   // and those people are skipped in later launches. Stop it here with the reason instead.

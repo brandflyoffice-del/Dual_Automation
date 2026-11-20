@@ -59,8 +59,8 @@ const ROLE_TITLES = Object.fromEntries(ROLE_CATALOG.map(r => [r.id, r.titles]));
 const ALL_ROLES = Object.keys(ROLE_TITLES);
 // Custom industries typed in the Launch form (e.g. "Jewelry"). With them the five core industries may be empty.
 const customIndustries = (Array.isArray(body.industryTerms) ? body.industryTerms : String(body.industryQuery || '').split(/[,;]/))
-  .map(s => String(s).trim()).filter(s => s.length >= 2 && s.length <= 60).slice(0, 8);
-const apifyIndustryNames = (Array.isArray(body.apifyIndustries) ? body.apifyIndustries : []).map(s => String(s).trim()).filter(s => s.length >= 3 && s.length <= 64).slice(0, 10);
+  .map(s => String(s).trim()).filter(s => s.length >= 2 && s.length <= 60).slice(0, 20);
+const apifyIndustryNames = (Array.isArray(body.apifyIndustries) ? body.apifyIndustries : []).map(s => String(s).trim()).filter(s => s.length >= 3 && s.length <= 64).slice(0, 20);
 const pick = (list, allowed, allToken) => {
   if (Array.isArray(list) && list.length) {
     const hit = list.filter(x => allowed.includes(x));
