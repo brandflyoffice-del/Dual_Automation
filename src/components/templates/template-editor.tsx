@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Loader2, Monitor, RotateCcw, Save, Smartphone, Undo2 } from "lucide-react";
+import { Loader2, Monitor, Plus, RotateCcw, Save, Smartphone, Trash2, Undo2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { HEX, MERGE_TAGS, buildEmailHtml, textToHtml, withSamples, type TemplateDesign, type TemplateStep } from "@/lib/email-template";
+import { HEX, MAX_STEPS, MERGE_TAGS, buildEmailHtml, textToHtml, withSamples, type TemplateDesign, type TemplateStep } from "@/lib/email-template";
 
 type Campaign = { id: string; name: string; status: string };
 type Data = { campaignId: string; design: TemplateDesign; steps: TemplateStep[]; warnings: string[]; lastBackupAt: string | null };
@@ -88,6 +88,31 @@ export function TemplateEditor() {
     });
   const setDelay = (days: number) =>
     setData((d) => (d ? { ...d, steps: d.steps.map((s, i) => (i === stepIdx ? { ...s, delayDays: days } : s)) } : d));
+
+  /** A new follow-up at the end (Smartlead creates it on save), 3 days after the last one by default. */
+  function addFollowUp() {
+    if (!data || data.steps.length >= MAX_STEPS) return;
+    const step: TemplateStep = {
+      id: null,
+      seqNumber: data.steps.length + 1,
+      delayDays: 3,
+      variants: [{ id: null, label: null, subject: "", text: "Hi {{first_name}},\n\n" }],
+    };
+    setData({ ...data, steps: [...data.steps, step] });
+    setStepIdx(data.steps.length);
+    setVarIdx(0);
+    requestAnimationFrame(() => subjectRef.current?.focus());
+  }
+
+  function removeStep() {
+    if (!data || data.steps.length <= 1) return;
+    const n = stepIdx + 1;
+    const note = stepIdx === 0 ? " The next email becomes the first one and is sent right away." : "";
+    if (!window.confirm(`Remove email ${n} from this campaign? Leads who have not reached it yet will not get it.${note}\n\nNothing changes in Smartlead until you press Save.`)) return;
+    setData({ ...data, steps: data.steps.filter((_, i) => i !== stepIdx) });
+    setStepIdx(Math.max(0, stepIdx - 1));
+    setVarIdx(0);
+  }
 
   /** Puts a merge tag where the cursor is (subject or body, whichever was last focused). */
   function insertTag(tag: string) {
@@ -238,7 +263,7 @@ export function TemplateEditor() {
                   <div className="flex flex-wrap gap-1.5">
                     {data.steps.map((s, i) => (
                       <button
-                        key={s.id}
+                        key={s.id ?? `new-${i}`}
                         type="button"
                         onClick={() => {
                           setStepIdx(i);
@@ -249,20 +274,30 @@ export function TemplateEditor() {
                           i === stepIdx ? "border-emerald bg-emerald/10 font-medium text-emerald" : "border-border text-muted-foreground hover:bg-foreground/[0.04]",
                         )}
                       >
-                        Email {s.seqNumber}
+                        Email {i + 1}
+                        {s.id === null && <span className="ml-1 text-[10px] font-normal text-indigo-700">new</span>}
+                        {i > 0 && <span className="ml-1 text-[10px] font-normal text-muted-foreground">+{s.delayDays}d</span>}
                       </button>
                     ))}
+                    <Button type="button" variant="outline" size="sm" onClick={addFollowUp} disabled={data.steps.length >= MAX_STEPS} title={data.steps.length >= MAX_STEPS ? `At most ${MAX_STEPS} emails` : "Add another follow-up email at the end"}>
+                      <Plus /> Add follow-up
+                    </Button>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-3 text-[13px]">
+                  <div className="flex flex-wrap items-center justify-between gap-3 text-[13px]">
                     {stepIdx === 0 ? (
                       <span className="text-muted-foreground">Sent first, when the lead starts.</span>
                     ) : (
                       <label className="flex items-center gap-2">
-                        Sent
+                        Wait
                         <Input type="number" min={1} max={60} value={step.delayDays} onChange={(e) => setDelay(Math.max(1, Math.min(60, Number(e.target.value) || 1)))} className="h-8 w-16" />
-                        days after email {data.steps[stepIdx - 1].seqNumber}
+                        days after email {stepIdx}, then send this one
                       </label>
+                    )}
+                    {data.steps.length > 1 && (
+                      <Button type="button" variant="ghost" size="xs" onClick={removeStep} className="text-rose-600 hover:text-rose-700">
+                        <Trash2 /> Remove this email
+                      </Button>
                     )}
                   </div>
 
@@ -338,7 +373,7 @@ export function TemplateEditor() {
                 <div>
                   <CardTitle>Preview</CardTitle>
                   <CardDescription>
-                    Email {step.seqNumber}
+                    Email {stepIdx + 1}
                     {step.variants.length > 1 ? ` · version ${variant.label ?? String.fromCharCode(65 + varIdx)}` : ""}
                   </CardDescription>
                 </div>

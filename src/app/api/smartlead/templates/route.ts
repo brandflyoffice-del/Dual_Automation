@@ -4,7 +4,7 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { config } from "@/lib/config";
 import { getSequences, listCampaigns, saveSequences, smartleadConfigured, type SlSequenceStep } from "@/lib/smartlead";
-import { BLANK_DESIGN, HEX, buildEmailHtml, looseText, parseEmailHtml, textToHtml, type TemplateDesign, type TemplateStep } from "@/lib/email-template";
+import { BLANK_DESIGN, HEX, MAX_STEPS, buildEmailHtml, looseText, parseEmailHtml, textToHtml, type TemplateDesign, type TemplateStep } from "@/lib/email-template";
 
 export const dynamic = "force-dynamic";
 
@@ -107,9 +107,9 @@ const putBody = z.object({
   campaignId: z.string().regex(ID),
   design,
   steps: z
-    .array(z.object({ id: z.number().int(), seqNumber: z.number().int().min(1), delayDays: z.number().int().min(0).max(60), variants: z.array(variant).min(1).max(5) }))
-    .min(1)
-    .max(10),
+    .array(z.object({ id: z.number().int().nullable(), seqNumber: z.number().int().min(1), delayDays: z.number().int().min(0).max(60), variants: z.array(variant).min(1).max(5) }))
+    .min(1, "Keep at least one email")
+    .max(MAX_STEPS, `At most ${MAX_STEPS} emails`),
 });
 
 export async function PUT(req: Request) {
@@ -119,15 +119,19 @@ export async function PUT(req: Request) {
   const { campaignId, design: d, steps } = parsed.data;
   try {
     const current = await getSequences(campaignId);
-    // The page edits the steps Smartlead has; it never adds or removes one (that stays in Smartlead).
+    // Steps with an id must still exist in Smartlead; id null = a new follow-up (Smartlead creates it). Steps left out of
+    // the list are deleted by Smartlead. Order on the page = order sent, so seq_number is renumbered 1..n.
+    if (new Set(steps.filter((s) => s.id !== null).map((s) => s.id)).size !== steps.filter((s) => s.id !== null).length)
+      return NextResponse.json({ error: "The same email appears twice. Reload and try again." }, { status: 400 });
     for (const s of steps) {
+      if (s.id === null) continue;
       const cur = current.find((c) => c.id === s.id);
       if (!cur) return NextResponse.json({ error: `Email ${s.seqNumber} changed in Smartlead since this page loaded. Reload and try again.` }, { status: 409 });
       const ids = new Set(liveVariants(cur).map((v) => v.id));
       if (s.variants.some((v) => v.id !== null && !ids.has(v.id))) return NextResponse.json({ error: "The A/B versions changed in Smartlead. Reload and try again." }, { status: 409 });
     }
     const sequences = steps.map((s, k) => {
-      const base = { id: s.id, seq_number: s.seqNumber, seq_delay_details: { delay_in_days: k === 0 ? 0 : s.delayDays } };
+      const base = { ...(s.id !== null ? { id: s.id } : {}), seq_number: k + 1, seq_delay_details: { delay_in_days: k === 0 ? 0 : s.delayDays } };
       const mk = (v: (typeof s.variants)[number]) => ({ subject: v.subject, email_body: buildEmailHtml(d, textToHtml(v.text)) });
       const hasAB = s.variants.length > 1 || s.variants[0].label !== null;
       return hasAB
