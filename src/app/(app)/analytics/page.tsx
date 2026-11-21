@@ -11,6 +11,7 @@ import { campaignStats, dayWiseStats, listCampaigns, listMailboxes, smartleadCon
 import { cn, formatPct, safePct } from "@/lib/utils";
 import { config } from "@/lib/config";
 import { AddMailbox, CampaignSendingButton, SendingSwitch, SyncMailboxes, ToolLinks, WarmupButton } from "@/components/analytics/controls";
+import { MailboxBoard } from "@/components/analytics/mailbox-board";
 
 export const dynamic = "force-dynamic";
 
@@ -296,7 +297,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                 <th className="py-2 pr-3 text-right font-medium">Sent today</th>
                 <th className="py-2 pr-3 font-medium">Warm-up</th>
                 <th className="py-2 pr-3 text-right font-medium">Reputation</th>
-                <th className="py-2 pr-3 text-right font-medium">Warm-up sent / spam</th>
+                <th className="py-2 pr-3 text-right font-medium">Warm-up sent / spam (7 days)</th>
                 <th className="py-2 text-right font-medium">Campaigns</th>
               </tr>
             </thead>
@@ -333,6 +334,12 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
           </table>
         </CardContent>
       </Card>
+
+      {configured && (
+        <div className="mt-4">
+          <MailboxBoard />
+        </div>
+      )}
     </>
   );
 }

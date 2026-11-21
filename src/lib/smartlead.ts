@@ -17,7 +17,7 @@ export class SmartleadError extends Error {
   }
 }
 
-async function sl<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
+async function sl<T>(method: "GET" | "POST" | "DELETE", path: string, body?: unknown): Promise<T> {
   const key = await apiKey();
   if (!key) throw new SmartleadError("Smartlead API key is not configured");
   const url = `${API}${path}${path.includes("?") ? "&" : "?"}api_key=${encodeURIComponent(key)}`;
@@ -145,14 +145,26 @@ export type SlMailbox = {
   smtpOk: boolean;
   imapOk: boolean;
   campaigns: number;
+  /** sent / spam = warm-up emails of the last 7 days (warmup_details totals are always 0, so they come from warmup-stats). */
   warmup: { status: string; reputation: string; sent: number; spam: number; replyRate: number | null } | null;
 };
+
+/** Last 7 days of warm-up for one mailbox: how many warm-up emails went out and how many landed in spam. */
+function warmupStats(id: string): Promise<{ sent: number; spam: number } | null> {
+  return cached(`warmup:${id}`, 10 * 60_000, async () => {
+    const w = await sl<Record<string, unknown>>("GET", `/email-accounts/${id}/warmup-stats`).catch(() => null);
+    return w ? { sent: num(w.sent_count), spam: num(w.spam_count) } : null;
+  });
+}
 
 export function listMailboxes(): Promise<SlMailbox[]> {
   return cached("mailboxes", 60_000, async () => {
     const rows = await sl<Record<string, unknown>[]>("GET", "/email-accounts/?offset=0&limit=100");
-    return (Array.isArray(rows) ? rows : []).map((a) => {
+    const list = Array.isArray(rows) ? rows : [];
+    const stats = await Promise.all(list.map((a) => (a.warmup_details ? warmupStats(String(a.id)) : Promise.resolve(null))));
+    return list.map((a, i) => {
       const w = (a.warmup_details ?? null) as Record<string, unknown> | null;
+      const ws = stats[i];
       return {
         id: String(a.id),
         fromName: String(a.from_name ?? ""),
@@ -164,7 +176,13 @@ export function listMailboxes(): Promise<SlMailbox[]> {
         imapOk: a.is_imap_success === true,
         campaigns: num(a.campaign_count),
         warmup: w
-          ? { status: String(w.status ?? ""), reputation: String(w.warmup_reputation ?? ""), sent: num(w.total_sent_count), spam: num(w.total_spam_count), replyRate: w.reply_rate == null ? null : num(w.reply_rate) }
+          ? {
+              status: String(w.status ?? ""),
+              reputation: String(w.warmup_reputation ?? ""),
+              sent: ws ? ws.sent : num(w.total_sent_count),
+              spam: ws ? ws.spam : num(w.total_spam_count),
+              replyRate: w.reply_rate == null ? null : num(w.reply_rate),
+            }
           : null,
       };
     });
@@ -333,6 +351,30 @@ export async function setSending(campaignId: string, on: boolean): Promise<{ att
   dropCache("campaigns");
   dropCache(`analytics:${campaignId}`);
   return { attached };
+}
+
+// ---------- which mailbox sends for which campaign (Email Analytics board) ----------
+
+export function campaignMailboxes(campaignId: string): Promise<string[]> {
+  return cached(`campaign-boxes:${campaignId}`, 30_000, () => campaignMailboxIds(campaignId));
+}
+
+export async function attachMailbox(campaignId: string, mailboxId: string): Promise<void> {
+  await sl("POST", `/campaigns/${campaignId}/email-accounts`, { email_account_ids: [Number(mailboxId)] });
+  dropCache(`campaign-boxes:${campaignId}`);
+  dropCache("mailboxes");
+}
+
+export async function detachMailbox(campaignId: string, mailboxId: string): Promise<void> {
+  await sl("DELETE", `/campaigns/${campaignId}/email-accounts`, { email_account_ids: [Number(mailboxId)] });
+  dropCache(`campaign-boxes:${campaignId}`);
+  dropCache("mailboxes");
+}
+
+/** Emails a day the mailbox may send across all its campaigns. 0 = it sends nothing (used by "Stop"); warm-up is separate. */
+export async function setDailyLimit(mailboxId: string, limit: number): Promise<void> {
+  await sl("POST", `/email-accounts/${mailboxId}`, { max_email_per_day: limit });
+  dropCache("mailboxes");
 }
 
 // ---------- email templates (sequence steps) ----------
