@@ -204,7 +204,13 @@ export function TemplateEditor() {
         </CardContent>
       </Card>
 
-      {loading || !data || !step || !variant ? (
+      {!loading && data && data.steps.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center text-sm text-muted-foreground">
+            This campaign has no emails yet. Add the steps in Smartlead first, then reload this page to edit them here.
+          </CardContent>
+        </Card>
+      ) : loading || !data || !step || !variant ? (
         <Card>
           <CardContent className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" /> Loading the emails from Smartlead…
