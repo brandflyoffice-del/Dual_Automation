@@ -26,6 +26,8 @@ export type TemplateStep = { id: number | null; seqNumber: number; delayDays: nu
 
 /** Most emails one sequence may have on the Email Templates page. */
 export const MAX_STEPS = 10;
+/** Most A/B versions one email may have. */
+export const MAX_VERSIONS = 5;
 
 export const HEX = /^#[0-9a-f]{6}$/i;
 

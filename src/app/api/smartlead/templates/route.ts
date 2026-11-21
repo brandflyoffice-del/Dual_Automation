@@ -52,13 +52,18 @@ function toEditor(steps: SlSequenceStep[]) {
   return { design: design ?? { ...BLANK_DESIGN, bookingLink: config.bookingLink }, steps: out, warnings };
 }
 
-/** Same shape the old script and Smartlead accept: step ids kept, A/B versions as seq_variants. */
-function restorePayload(steps: SlSequenceStep[]) {
+/**
+ * A backup → what Smartlead accepts. Smartlead never brings back a deleted email or A/B version by its old id, so an id
+ * that is no longer in `current` is left out and Smartlead creates that email / version again with the same content.
+ */
+function restorePayload(steps: SlSequenceStep[], current: SlSequenceStep[]) {
+  const liveSteps = new Set(current.map((c) => c.id));
+  const liveVars = new Set(current.flatMap((c) => liveVariants(c).map((v) => v.id)));
   return steps.map((s) => {
     const vs = liveVariants(s);
-    const base = { id: s.id, seq_number: s.seq_number, seq_delay_details: { delay_in_days: delayOf(s) } };
+    const base = { ...(liveSteps.has(s.id) ? { id: s.id } : {}), seq_number: s.seq_number, seq_delay_details: { delay_in_days: delayOf(s) } };
     return vs.length
-      ? { ...base, seq_variants: vs.map((v) => ({ id: v.id, variant_label: v.variant_label, subject: v.subject, email_body: v.email_body })) }
+      ? { ...base, seq_variants: vs.map((v) => ({ ...(liveVars.has(v.id) ? { id: v.id } : {}), variant_label: v.variant_label, subject: v.subject, email_body: v.email_body })) }
       : { ...base, subject: s.subject, email_body: s.email_body };
   });
 }
@@ -155,7 +160,7 @@ export async function POST(req: Request) {
   try {
     const [last, ...rest] = await backups(id);
     if (!last) return NextResponse.json({ error: "Nothing to undo for this campaign" }, { status: 404 });
-    await saveSequences(id, restorePayload(last.steps));
+    await saveSequences(id, restorePayload(last.steps, await getSequences(id)));
     await writeBackups(id, rest);
     return NextResponse.json({ ok: true, restoredFrom: last.at });
   } catch (e) {

@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { HEX, MAX_STEPS, MERGE_TAGS, buildEmailHtml, textToHtml, withSamples, type TemplateDesign, type TemplateStep } from "@/lib/email-template";
+import { HEX, MAX_STEPS, MAX_VERSIONS, MERGE_TAGS, buildEmailHtml, textToHtml, withSamples, type TemplateDesign, type TemplateStep } from "@/lib/email-template";
 
 type Campaign = { id: string; name: string; status: string };
 type Data = { campaignId: string; design: TemplateDesign; steps: TemplateStep[]; warnings: string[]; lastBackupAt: string | null };
@@ -102,6 +102,32 @@ export function TemplateEditor() {
     setStepIdx(data.steps.length);
     setVarIdx(0);
     requestAnimationFrame(() => subjectRef.current?.focus());
+  }
+
+  /**
+   * Another A/B version of the selected email, starting as a copy of the version on screen (so only the difference
+   * needs typing). The first version gets the label A when the email had none.
+   */
+  function addVersion() {
+    if (!data || !step || !variant || step.variants.length >= MAX_VERSIONS) return;
+    const used = new Set(step.variants.map((v, j) => v.label ?? String.fromCharCode(65 + j)));
+    let code = 65;
+    while (used.has(String.fromCharCode(code))) code++;
+    const copy = { id: null, label: String.fromCharCode(code), subject: variant.subject, text: variant.text };
+    const variants = [...step.variants.map((v, j) => ({ ...v, label: v.label ?? String.fromCharCode(65 + j) })), copy];
+    setData({ ...data, steps: data.steps.map((s, i) => (i === stepIdx ? { ...s, variants } : s)) });
+    setVarIdx(variants.length - 1);
+    requestAnimationFrame(() => subjectRef.current?.focus());
+  }
+
+  function removeVersion() {
+    if (!data || !step || step.variants.length <= 1) return;
+    const j = Math.min(varIdx, step.variants.length - 1);
+    const label = step.variants[j].label ?? String.fromCharCode(65 + j);
+    if (!window.confirm(`Remove version ${label} of email ${stepIdx + 1}? Nothing changes in Smartlead until you press Save.`)) return;
+    const variants = step.variants.filter((_, k) => k !== j);
+    setData({ ...data, steps: data.steps.map((s, i) => (i === stepIdx ? { ...s, variants } : s)) });
+    setVarIdx(Math.max(0, j - 1));
   }
 
   function removeStep() {
@@ -301,24 +327,37 @@ export function TemplateEditor() {
                     )}
                   </div>
 
-                  {step.variants.length > 1 && (
-                    <div className="flex flex-wrap items-center gap-1.5 text-[12px]">
-                      <span className="text-muted-foreground">A/B versions (Smartlead sends each to half the leads):</span>
-                      {step.variants.map((v, j) => (
-                        <button
-                          key={v.id ?? j}
-                          type="button"
-                          onClick={() => setVarIdx(j)}
-                          className={cn(
-                            "rounded-md border px-2.5 py-1 transition-colors",
-                            j === varIdx ? "border-indigo-400 bg-indigo-50 font-medium text-indigo-700" : "border-border text-muted-foreground hover:bg-foreground/[0.04]",
-                          )}
-                        >
-                          Version {v.label ?? String.fromCharCode(65 + j)}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                  <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-dashed border-border px-2.5 py-2 text-[12px]">
+                    {step.variants.length > 1 ? (
+                      <>
+                        <span className="text-muted-foreground">A/B versions (Smartlead splits the leads evenly):</span>
+                        {step.variants.map((v, j) => (
+                          <button
+                            key={v.id ?? `new-${j}`}
+                            type="button"
+                            onClick={() => setVarIdx(j)}
+                            className={cn(
+                              "rounded-md border px-2.5 py-1 transition-colors",
+                              j === varIdx ? "border-indigo-400 bg-indigo-50 font-medium text-indigo-700" : "border-border text-muted-foreground hover:bg-foreground/[0.04]",
+                            )}
+                          >
+                            Version {v.label ?? String.fromCharCode(65 + j)}
+                            {v.id === null && <span className="ml-1 text-[10px] font-normal text-indigo-700">new</span>}
+                          </button>
+                        ))}
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground">One version. Add another to test a different subject or text (A/B).</span>
+                    )}
+                    <Button type="button" variant="outline" size="xs" onClick={addVersion} disabled={step.variants.length >= MAX_VERSIONS}>
+                      <Plus /> Add A/B version
+                    </Button>
+                    {step.variants.length > 1 && (
+                      <Button type="button" variant="ghost" size="xs" onClick={removeVersion} className="text-rose-600 hover:text-rose-700">
+                        <Trash2 /> Remove version {variant.label ?? String.fromCharCode(65 + Math.min(varIdx, step.variants.length - 1))}
+                      </Button>
+                    )}
+                  </div>
 
                   <div className="space-y-1.5">
                     <Label htmlFor="tpl-subject">Subject</Label>
