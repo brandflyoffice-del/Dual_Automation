@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, CalendarCheck2, FileBarChart2, Inbox, LineChart, LogOut, Mail, Radar, Layers, Settings } from "lucide-react";
+import { BarChart3, CalendarCheck2, FileBarChart2, Inbox, LineChart, LogOut, Mail, PenLine, Radar, Layers, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SystemStatus } from "@/components/system-status";
 import { LaunchCampaign } from "@/components/launch-campaign";
@@ -14,6 +14,7 @@ const NAV = [
   { href: "/leads", label: "Lead Intelligence", short: "Leads", icon: Radar },
   { href: "/services", label: "Services", short: "Services", icon: Layers },
   { href: "/campaigns", label: "Sequence Monitor", short: "Campaigns", icon: Mail },
+  { href: "/templates", label: "Email Templates", short: "Templates", icon: PenLine },
   { href: "/analytics", label: "Email Analytics", short: "Analytics", icon: LineChart },
   { href: "/reports", label: "Weekly Reports", short: "Reports", icon: FileBarChart2 },
   { href: "/settings", label: "Settings", short: "Settings", icon: Settings },

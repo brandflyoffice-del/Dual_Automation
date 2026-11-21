@@ -335,6 +335,28 @@ export async function setSending(campaignId: string, on: boolean): Promise<{ att
   return { attached };
 }
 
+// ---------- email templates (sequence steps) ----------
+
+export type SlSequenceVariant = { id: number; variant_label: string | null; subject: string; email_body: string; is_deleted?: boolean };
+export type SlSequenceStep = {
+  id: number;
+  seq_number: number;
+  subject: string;
+  email_body: string;
+  seq_delay_details?: { delayInDays?: number; delay_in_days?: number };
+  sequence_variants?: SlSequenceVariant[] | null;
+};
+
+export async function getSequences(campaignId: string): Promise<SlSequenceStep[]> {
+  const rows = await sl<SlSequenceStep[]>("GET", `/campaigns/${campaignId}/sequences`);
+  return (Array.isArray(rows) ? rows : []).sort((a, b) => a.seq_number - b.seq_number);
+}
+
+/** Writes all steps of a campaign at once (Smartlead replaces the sequence; ids keep each step and A/B version in place). */
+export async function saveSequences(campaignId: string, sequences: unknown[]): Promise<void> {
+  await sl("POST", `/campaigns/${campaignId}/sequences`, { sequences });
+}
+
 // ---------- mailbox accounts (raw rows include logins; only src/lib/mailboxes.ts may use these) ----------
 
 export function rawEmailAccounts(): Promise<Record<string, unknown>[]> {
