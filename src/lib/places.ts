@@ -200,7 +200,7 @@ const INDUSTRY_RULES: [RegExp, string][] = [
   [/fashion|apparel|clothing|garment|footwear|\bshoes?\b/i, "Retail Apparel and Fashion"],
   [/furniture|d[eé]cor|home goods|homeware/i, "Furniture and Home Furnishings Manufacturing"],
   [/solar|renewable/i, "Renewable Energy Power Generation"],
-  [/hvac|plumb|roof|electric(al)? contract|home services?|contractor|remodel|construction|landscap|pest control/i, "Construction"],
+  [/hvac|plumb|roof|electric(al)? contract|home services?|contractor|remodel|construction/i, "Construction"],
   [/real estate|realt|propert/i, "Real Estate"],
   [/restaurant|cafe|coffee/i, "Restaurants"],
   [/law|legal|attorney/i, "Law Practice"],

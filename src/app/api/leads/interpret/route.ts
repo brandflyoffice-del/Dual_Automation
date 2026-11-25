@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { EMPLOYEE_RANGES, ICP, INDUSTRY_LABEL, ROLE_OPTIONS } from "@/lib/constants";
-import { CITY_LIST, COUNTRY_BY_CODE, COUNTRY_LIST, INDUSTRY_SUGGESTIONS, type PlacePick } from "@/lib/places";
+import { CITY_LIST, COUNTRY_LIST, INDUSTRY_SUGGESTIONS, type PlacePick } from "@/lib/places";
+import { clean, toPlaces } from "@/lib/ai-places";
 import { getSetting } from "@/lib/settings";
 import { integrationValue } from "@/lib/integrations";
 
@@ -44,7 +45,6 @@ async function openAi(): Promise<{ key: string; model: string } | null> {
 const CORE_KEYS = ICP.industries as readonly string[];
 const ROLE_KEYS = ROLE_OPTIONS.map((r) => r.id);
 const SIZE_KEYS = EMPLOYEE_RANGES.map((e) => e.id);
-const clean = (v: unknown, max = 60) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max);
 const list = (v: unknown, max = 8, len = 60) =>
   (Array.isArray(v) ? v : typeof v === "string" ? v.split(",") : []).map((x) => clean(x, len)).filter((x) => x.length >= 2).slice(0, max);
 const subset = (v: unknown, allowed: readonly string[]) => {
@@ -52,28 +52,6 @@ const subset = (v: unknown, allowed: readonly string[]) => {
   const hit = [...new Set(v.map((x) => String(x).trim()).filter((x) => allowed.includes(x)))];
   return hit.length ? hit : null;
 };
-
-/** Model output → known places. A city we list keeps its country; an unknown city with a valid country code is still searchable. */
-function toPlaces(raw: unknown): PlacePick[] | null {
-  if (!Array.isArray(raw) || !raw.length) return null;
-  const out: PlacePick[] = [];
-  for (const r of raw.slice(0, 10)) {
-    const o = (r ?? {}) as Record<string, unknown>;
-    const name = clean(o.name, 60);
-    const code = clean(o.country, 2).toLowerCase();
-    if (name.length < 2) continue;
-    const country = COUNTRY_LIST.find((c) => c.name.toLowerCase() === name.toLowerCase() || (o.kind === "country" && c.code === code));
-    if (country && o.kind !== "city") {
-      out.push({ kind: "country", code: country.code });
-      continue;
-    }
-    const city = CITY_LIST.find((c) => c.name.toLowerCase() === name.toLowerCase() && (!code || c.code === code));
-    if (city) out.push({ kind: "city", name: city.name, code: city.code, area: city.area });
-    else if (COUNTRY_BY_CODE[code]) out.push({ kind: "city", name, code });
-    else out.push({ kind: "custom", name });
-  }
-  return out.length ? out : null;
-}
 
 /** No OpenAI key: still pick up a number, places and industries we know by name. Nothing is guessed. */
 function fallback(text: string): AiFill {

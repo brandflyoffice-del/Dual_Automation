@@ -154,6 +154,7 @@ model LaunchRun {
   stage      String    @default("queued") // queued | searching | filtering | checking | writing | adding | done | failed
   found      Int       @default(0)
   passed     Int       @default(0)
+  form       Json? // the Launch form filters this run was started with (LaunchFormState), for "Fix filters with AI"
   matched    Int       @default(0) // passed the ICP filter (places, roles, sizes, industries)
   known      Int       @default(0) // of those, already in the list (skipped)
   writing    Int       @default(0)

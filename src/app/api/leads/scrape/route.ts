@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import type { Prisma } from "@prisma/client";
+import { readLaunchForm } from "@/lib/launch-form";
 import { callN8n, n8nWebhooks } from "@/lib/config";
 import { db } from "@/lib/db";
 import { launchBlocker } from "@/lib/service-health";
@@ -40,6 +42,7 @@ const schema = z
     limit: z.number().int().min(5).max(200).default(40),
     provider: z.enum(["ai-ark", "apify"]).default("ai-ark"),
     campaignId: z.enum(["4238486", "4238487", "4238488", "4238489", "4238491"]).optional(),
+    form: z.record(z.string(), z.unknown()).optional(), // the form filters, kept with the run for "Fix filters with AI" (not sent to n8n)
   })
   .refine((d) => (d.regions?.length ?? 0) > 0 || !!d.region, { message: "Pick at least one region" })
   .refine((d) => (d.industries?.length ?? 0) > 0 || (d.industryTerms?.length ?? 0) > 0 || !!d.industryQuery || !!d.industry, { message: "Pick at least one industry" });
@@ -58,8 +61,9 @@ export async function POST(req: Request) {
   const blocked = await launchBlocker(parsed.data.provider ?? "ai-ark");
   if (blocked) return NextResponse.json({ error: blocked }, { status: 402 });
 
+  const { form, ...searchBody } = parsed.data;
   const payload = {
-    ...parsed.data,
+    ...searchBody,
     icp: {
       revenueMin: parsed.data.revenueBand === "small" || parsed.data.revenueBand === "any" || parsed.data.anyRevenue ? null : ICP.revenueMin,
       revenueMax: parsed.data.revenueBand === "small" ? ICP.revenueMin : parsed.data.revenueBand === "any" || parsed.data.anyRevenue ? null : ICP.revenueMax,
@@ -70,7 +74,7 @@ export async function POST(req: Request) {
   };
   // A run row lets the dashboard show live progress; n8n reports each stage against its id.
   const run = await db.launchRun
-    .create({ data: { name: parsed.data.name ?? "", provider: parsed.data.provider ?? "ai-ark", campaignId: parsed.data.campaignId ?? null, target: parsed.data.limit ?? 0, stage: "searching" } })
+    .create({ data: { name: parsed.data.name ?? "", provider: parsed.data.provider ?? "ai-ark", campaignId: parsed.data.campaignId ?? null, target: parsed.data.limit ?? 0, stage: "searching", form: (readLaunchForm(form) ?? undefined) as Prisma.InputJsonValue | undefined } })
     .catch(() => null);
   const res = await callN8n(n8nWebhooks.scraperBatch, { ...payload, runId: run?.id ?? null });
   if (run && !res.ok) await db.launchRun.update({ where: { id: run.id }, data: { status: "failed", stage: "failed", message: res.message, finishedAt: new Date() } }).catch(() => {});

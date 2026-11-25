@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { AlertTriangle, Check, ChevronDown, ChevronUp, ExternalLink, Loader2, Rocket, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, ChevronUp, ExternalLink, Loader2, Rocket, Sparkles, X } from "lucide-react";
 import { OUTREACH_CAMPAIGNS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +22,7 @@ type Run = {
   matched?: number;
   known?: number;
   added: number;
+  form?: unknown;
   status: "running" | "done" | "failed";
   message: string;
   startedAt: string;
@@ -30,6 +31,11 @@ type Run = {
 
 const ORDER = ["searching", "filtering", "checking", "writing", "adding", "done"];
 const DISMISS_KEY = "fenebris.launchDismissed";
+
+/** Opens the Launch form on this run's filters and lets AI repair them (handled in launch-campaign.tsx). */
+function fixFilters(run: Run) {
+  window.dispatchEvent(new CustomEvent("launch:fix", { detail: { run: { id: run.id, form: run.form } } }));
+}
 
 function readDismissed(): string[] {
   try {
@@ -79,7 +85,7 @@ export function LaunchProgress() {
         const camp = OUTREACH_CAMPAIGNS.find((c) => c.id === latest.campaignId)?.name ?? "your campaign";
         if (latest.status === "failed") toast.error("Launch failed", { description: latest.message || "The launch stopped with an error.", duration: 20000 });
         else if (latest.added > 0) toast.success("Campaign ready", { description: `${latest.added} new leads added to ${camp}, each with its own emails.`, duration: 12000 });
-        else toast.warning("No new leads", { description: latest.message || "No new leads this time.", duration: 15000 });
+        else toast.warning("No new leads", { description: latest.message || "No new leads this time.", duration: 20000, action: { label: "Fix filters with AI", onClick: () => fixFilters(latest) } });
       }
       last.current[latest.id] = latest.status;
     }
@@ -207,6 +213,16 @@ export function LaunchProgress() {
                 <AlertTriangle className="size-3.5" /> No new leads this time
               </div>
               {run.message && <div className="mt-0.5 text-foreground/80">{run.message}</div>}
+              <button
+                type="button"
+                onClick={() => fixFilters(run)}
+                className="mt-2.5 inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-amber-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-amber-700"
+              >
+                <Sparkles className="size-3.5" /> Fix filters with AI
+              </button>
+              <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
+                AI checks your industries, roles, sizes and places, repairs or widens what blocks the search, and opens the form with the changes listed. Nothing is launched until you press Launch.
+              </p>
             </div>
           )}
           {outcome === "ready" && (

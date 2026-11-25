@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Building2, Check, ChevronDown, Info, Loader2, MapPin, Plus, Rocket, RotateCcw, Save, Sparkles, Target, Users, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MultiPicker, type PickerOption } from "@/components/ui/multi-picker";
+import { readLaunchForm, type LaunchFormState } from "@/lib/launch-form";
 import {
   APIFY_MAX_TITLES,
   apifyTitleList,
@@ -155,11 +156,20 @@ type LaunchDefaults = {
   anyRevenue: boolean;
   /** "small" = under $100k, "icp" = $100k–$10M, "any" (older saved defaults only have anyRevenue) */
   revenue?: "small" | "icp" | "any";
+  industryMap?: Record<string, string | null>;
   emailType: "work" | "any";
   maxPerCompany: number;
   limit: number;
 };
 const DEFAULTS_KEY = "fenebris.launchDefaults";
+type LaunchRunRef = { id: string; form?: unknown };
+type FixEntry = { el: RefObject<HTMLButtonElement | null>; run: (r: LaunchRunRef) => void };
+const FIXERS = new Set<FixEntry>();
+/** The LinkedIn industry for a typed industry: the AI-matched map first (null = no category fits), then the built-in rules. */
+function linkedinFor(label: string, map: Record<string, string | null>): string | undefined {
+  const k = label.toLowerCase();
+  return k in map ? (map[k] ?? undefined) : apifyIndustryFor(label);
+}
 function savedDefaults(): Partial<LaunchDefaults> {
   try {
     const raw = window.localStorage.getItem(DEFAULTS_KEY);
@@ -175,7 +185,10 @@ export function LaunchCampaign({ className, compact = false }: { className?: str
   const [provider, setProvider] = useState<LeadProvider>("ai-ark");
   const [sentence, setSentence] = useState("");
   const [filledFrom, setFilledFrom] = useState("");
-  const [fill, setFill] = useState<{ changes: string[]; note: string; model: boolean } | null>(null);
+  const [fill, setFill] = useState<{ changes: string[]; note: string; model: boolean; title?: string } | null>(null);
+  const [fixing, setFixing] = useState(false);
+  const [industryMap, setIndustryMap] = useState<Record<string, string | null>>({});
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const [name, setName] = useState("");
   const [lines, setLines] = useState<ServiceLine[]>([]);
   const [lineId, setLineId] = useState("AUTO");
@@ -380,6 +393,7 @@ export function LaunchCampaign({ className, compact = false }: { className?: str
     setPlaces(arr(d.places, DEFAULT_PLACES));
     setCore(Array.isArray(d.core) ? d.core : CORE);
     setCustom(Array.isArray(d.custom) ? d.custom : []);
+    setIndustryMap(d.industryMap && typeof d.industryMap === "object" ? d.industryMap : {});
     setRoles(arr(d.roles, PRESET_ROLES));
     setRolesTouched(Array.isArray(d.roles) && d.roles.length > 0);
     setEmployees(arr(d.employees, DEFAULT_EMPLOYEE_RANGES));
@@ -389,8 +403,104 @@ export function LaunchCampaign({ className, compact = false }: { className?: str
     setLimit(Number.isFinite(d.limit) && d.limit! >= 1 ? d.limit! : 40);
   }
 
+  /** The filters as one object (saved with the launch run and sent to "Fix filters with AI"). */
+  function buildForm(map: Record<string, string | null> = industryMap): LaunchFormState {
+    return {
+      provider, lineId, sub, campaignId, campaignLock, places, core, custom, industryMap: map, roles, employees, revenue, emailType,
+      maxPerCompany, limit, extraTitles, excludeNote, keyword, name,
+    };
+  }
+
+  function applyForm(f: Partial<LaunchFormState>) {
+    if (f.provider) setProvider(f.provider);
+    if (f.lineId) setLineId(f.lineId);
+    if (f.sub) setSub(f.sub);
+    if (f.campaignId) setCampaignId(f.campaignId);
+    setCampaignLock(f.campaignLock ?? !!f.campaignId);
+    if (f.places?.length) setPlaces(f.places);
+    if (f.core) setCore(f.core);
+    if (f.custom) setCustom(f.custom);
+    if (f.industryMap) setIndustryMap(f.industryMap);
+    if (f.roles?.length) {
+      setRoles(f.roles);
+      setRolesTouched(true);
+    }
+    if (f.employees?.length) setEmployees(f.employees);
+    if (f.revenue) setRevenue(f.revenue);
+    if (f.emailType) setEmailType(f.emailType);
+    if (f.maxPerCompany) setMaxPerCompany(f.maxPerCompany);
+    if (f.limit) setLimit(f.limit);
+    setExtraTitles(f.extraTitles ?? "");
+    setExcludeNote(f.excludeNote ?? "");
+    setKeyword(f.keyword ?? "");
+    setName(f.name ?? "");
+    if (f.excludeNote || f.keyword) setMore(true);
+  }
+
+  /** Typed industries the rules do not know → LinkedIn industry by AI. Never throws; unresolved ones stay unmapped. */
+  async function resolveIndustries(list: string[]): Promise<Record<string, string | null>> {
+    const todo = list.filter((c) => !(c.toLowerCase() in industryMap) && !apifyIndustryFor(c));
+    if (!todo.length) return {};
+    try {
+      const r = await fetch("/api/leads/industry-map", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ industries: todo }) });
+      const j = (await r.json()) as { map?: Record<string, string | null> };
+      return r.ok && j.map ? j.map : {};
+    } catch {
+      return {};
+    }
+  }
+
+  /** Called when an industry is added: match it in the background so the search understands it. */
+  async function matchIndustry(text: string) {
+    const got = await resolveIndustries([text]);
+    const hit = got[text.toLowerCase()];
+    if (!Object.keys(got).length) return;
+    setIndustryMap((m) => ({ ...m, ...got }));
+    toast.info(hit ? `"${text}" is searched as: ${hit}` : `"${text}" has no LinkedIn category, so it is searched as a headline word`);
+  }
+
+  /** Launch card button: open the form on the failed launch's filters, let AI repair them, show what changed. */
+  async function fixWithAi(r: LaunchRunRef) {
+    const src: Partial<LaunchFormState> = readLaunchForm(r.form) ?? { ...(readLaunchForm(savedDefaults()) ?? {}), provider: provider === "apify" ? "apify" : "ai-ark" };
+    setFilledFrom("ai-fix"); // stops the open-with-defaults effect from replacing the filters
+    setSentence("");
+    applyForm(src);
+    setOpen(true);
+    setFixing(true);
+    setFill(null);
+    try {
+      const res = await fetch("/api/launch/fix", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ runId: r.id, form: src }) });
+      const j = (await res.json().catch(() => ({}))) as { patch?: Partial<LaunchFormState>; changes?: string[]; note?: string; usedAi?: boolean; error?: string };
+      if (!res.ok || !j.patch) throw new Error(j.error || "The fix did not answer");
+      applyForm({ ...src, ...j.patch });
+      setFill({ title: "AI fixed the filters. Check them, then press Launch", changes: j.changes ?? [], note: j.note ?? "", model: !!j.usedAi });
+      toast.success("Filters fixed", { description: "Read what changed at the top, then press Launch." });
+    } catch (e) {
+      toast.error("Could not fix the filters", { description: (e as Error).message });
+    } finally {
+      setFixing(false);
+    }
+  }
+  const fixRef = useRef(fixWithAi);
+  fixRef.current = fixWithAi;
+  useEffect(() => {
+    const entry: FixEntry = { el: triggerRef, run: (r) => fixRef.current(r) };
+    FIXERS.add(entry);
+    const onFix = (e: Event) => {
+      // Several forms are mounted (page header, mobile header): the one with a visible Launch button answers, else the first.
+      const all = [...FIXERS];
+      const target = all.find((x) => x.el.current && x.el.current.offsetParent !== null) ?? all[0];
+      if (target === entry) entry.run((e as CustomEvent<{ run: LaunchRunRef }>).detail.run);
+    };
+    window.addEventListener("launch:fix", onFix);
+    return () => {
+      FIXERS.delete(entry);
+      window.removeEventListener("launch:fix", onFix);
+    };
+  }, []);
+
   function saveDefaults() {
-    const d: LaunchDefaults = { lineId, places, core, custom, roles, employees, anyRevenue, revenue, emailType, maxPerCompany, limit };
+    const d: LaunchDefaults = { lineId, places, core, custom, industryMap, roles, employees, anyRevenue, revenue, emailType, maxPerCompany, limit };
     try {
       window.localStorage.setItem(DEFAULTS_KEY, JSON.stringify(d));
       toast.success("Saved as your default", { description: "Launch opens with these filters next time. Reset brings them back." });
@@ -446,6 +556,8 @@ export function LaunchCampaign({ className, compact = false }: { className?: str
     }
     setBusy(true);
     try {
+      // Any typed industry the built-in rules do not know is matched to a LinkedIn industry by AI first.
+      const mapNow = { ...industryMap, ...(await resolveIndustries(custom)) };
       const pp = placesPayload(places);
       const res = await fetch("/api/leads/scrape", {
         method: "POST",
@@ -460,7 +572,7 @@ export function LaunchCampaign({ className, compact = false }: { className?: str
           europeCountries: pp.mode === "regions" && pp.regions.includes("EUROPE") ? pp.europeCountries : undefined,
           industries: core,
           industryTerms: custom,
-          apifyIndustries: custom.map(apifyIndustryFor).filter(Boolean),
+          apifyIndustries: custom.map((c) => linkedinFor(c, mapNow)).filter(Boolean),
           industryQuery: custom.join(", ").slice(0, 80),
           offering: offeringText.slice(0, 80),
           roles,
@@ -475,6 +587,7 @@ export function LaunchCampaign({ className, compact = false }: { className?: str
           maxPerCompany,
           limit,
           campaignId,
+          form: buildForm(mapNow),
         }),
       });
       const json = await res.json().catch(() => ({}));
@@ -505,7 +618,7 @@ export function LaunchCampaign({ className, compact = false }: { className?: str
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        <Button className={cn(compact && "h-8 px-2.5 text-xs", className)}>
+        <Button ref={triggerRef} className={cn(compact && "h-8 px-2.5 text-xs", className)}>
           <Rocket />
           {compact ? "Launch" : "Launch campaign"}
         </Button>
@@ -547,11 +660,16 @@ export function LaunchCampaign({ className, compact = false }: { className?: str
                   </Button>
                 </div>
               </div>
+              {fixing && (
+                <div className="flex items-center gap-2 rounded-lg border border-indigo/25 bg-indigo/[0.05] px-3 py-2.5 text-[12px] font-medium text-indigo-700">
+                  <Loader2 className="size-3.5 animate-spin" /> AI is checking why the last search found nobody and repairing the filters…
+                </div>
+              )}
               {fill && (
                 <div className="rounded-lg border border-indigo/25 bg-indigo/[0.05] px-3 py-2.5">
                   <p className="flex items-center gap-1.5 text-[12px] font-semibold text-indigo-700">
                     <Sparkles className="size-3.5" />
-                    {fill.model ? (fill.changes.length ? "AI filled these fields" : "AI found nothing new to fill") : "Filled without AI"}
+                    {fill.title ?? (fill.model ? (fill.changes.length ? "AI filled these fields" : "AI found nothing new to fill") : "Filled without AI")}
                   </p>
                   {fill.changes.length > 0 && (
                     <ul className="mt-1.5 flex flex-wrap gap-1.5">
@@ -732,11 +850,15 @@ export function LaunchCampaign({ className, compact = false }: { className?: str
                   customHint="Add industry"
                   onPick={(o) => {
                     if (o.key.startsWith("core:")) setCore((v) => [...v, o.key.slice(5)]);
-                    else setCustom((v) => [...v, o.label]);
+                    else {
+                      setCustom((v) => [...v, o.label]);
+                      void matchIndustry(o.label);
+                    }
                   }}
                   onCustom={(text) => {
                     const t = text.slice(0, 60);
                     setCustom((v) => (v.some((x) => x.toLowerCase() === t.toLowerCase()) ? v : [...v, t]));
+                    void matchIndustry(t);
                   }}
                   onRemove={(key) => {
                     if (key.startsWith("core:")) setCore((v) => v.filter((k) => k !== key.slice(5)));
