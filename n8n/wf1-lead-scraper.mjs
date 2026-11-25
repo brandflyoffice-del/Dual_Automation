@@ -149,8 +149,10 @@ const APIFY_INDUSTRY = {
 const apifyIndustries = [...new Set(industriesSel.flatMap(i => APIFY_INDUSTRY[i] || []).concat(apifyIndustryNames))];
 const apifyKeywords = [];
 if (keyword && keyword.length >= 3) apifyKeywords.push(keyword.slice(0, 64));
-// A custom industry with no LinkedIn industry name is searched as a headline keyword instead.
-if (customIndustries.length > apifyIndustryNames.length) customIndustries.filter(c => c.length >= 3 && !apifyIndustries.some(a => a.toLowerCase().includes(c.toLowerCase().slice(0, 5)))).forEach(c => apifyKeywords.push(c.slice(0, 64)));
+// Apify ANDs headline keywords with the industries, so typed industries become headline keywords ONLY when none of
+// them maps to a LinkedIn industry. Mixing both made every person need e.g. "dental" in their headline AND a
+// Retail / Medical company: three launches found almost only dentists, then nobody (2026-11-25).
+if (!apifyIndustries.length) customIndustries.filter(c => c.length >= 3).forEach(c => apifyKeywords.push(c.slice(0, 64)));
 const maxPerCompany = Math.min(5, Math.max(1, parseInt(body.maxPerCompany || 2, 10)));
 // Same list as apifyTitleList() in targeting.mjs: extra titles a picked role already covers are not sent twice.
 const coveredTitles = new Set(roles.flatMap(r => ROLE_TITLES[r] || []).map(t => t.toLowerCase()));

@@ -185,6 +185,30 @@ export const INDUSTRY_SUGGESTIONS: { label: string; apify?: string }[] = [
   { label: "Printing & Packaging", apify: "Packaging and Containers Manufacturing" },
 ];
 
+/**
+ * Typed industries → LinkedIn industry, for words that are not an exact suggestion ("Jewellery", "Beauty & Skincare",
+ * "HVAC", "Med Spas"…). Before this, an unmatched word went to Apify as a profile-headline keyword, and Apify ANDs
+ * keywords with the industries: one launch then only found people whose headline said "dental" (2026-11-25).
+ * First match wins, so the specific rules come first.
+ */
+const INDUSTRY_RULES: [RegExp, string][] = [
+  [/jewel/i, "Retail Luxury Goods and Jewelry"],
+  [/dental|dentist|orthodont/i, "Medical Practices"],
+  [/med ?spa|aesthetic|wellness|fitness|\bgym|salon|\bspa\b/i, "Wellness and Fitness Services"],
+  [/clinic|medical|health ?care|chiropract|physio/i, "Medical Practices"],
+  [/beauty|skin ?care|cosmetic|personal care|hair ?care/i, "Personal Care Product Manufacturing"],
+  [/fashion|apparel|clothing|garment|footwear|\bshoes?\b/i, "Retail Apparel and Fashion"],
+  [/furniture|d[eé]cor|home goods|homeware/i, "Furniture and Home Furnishings Manufacturing"],
+  [/solar|renewable/i, "Renewable Energy Power Generation"],
+  [/hvac|plumb|roof|electric(al)? contract|home services?|contractor|remodel|construction|landscap|pest control/i, "Construction"],
+  [/real estate|realt|propert/i, "Real Estate"],
+  [/restaurant|cafe|coffee/i, "Restaurants"],
+  [/law|legal|attorney/i, "Law Practice"],
+  [/account|bookkeep|\bcpa\b/i, "Accounting"],
+  [/insurance/i, "Insurance"],
+];
+
 export function apifyIndustryFor(label: string) {
-  return INDUSTRY_SUGGESTIONS.find((s) => s.label.toLowerCase() === label.trim().toLowerCase())?.apify;
+  const exact = INDUSTRY_SUGGESTIONS.find((s) => s.label.toLowerCase() === label.trim().toLowerCase())?.apify;
+  return exact ?? INDUSTRY_RULES.find(([rx]) => rx.test(label))?.[1];
 }
